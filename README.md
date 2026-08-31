@@ -1,26 +1,41 @@
-# 🤝 Claude Collaborator (雙代理人協同架構 Skill & CLI)
+# 🤝 Agent Collaborator (多代理人協同架構 Skill & CLI)
 
-> **Antigravity / Gemini + Claude CLI 雙代理人深度協作與交叉驗證系統**
+> **Antigravity / Gemini + Claude CLI / Codex / Cursor 多代理人深度協作與交叉驗證系統**
 > 具備自動優雅降級（Graceful Fallback）、模組化安裝與 Superpowers 工作流無縫整合。
 
 ---
 
-## 🧩 概念解構：與 Antigravity / Superpowers 的關係
+## 🌟 核心理念：為什麼需要多代理人？(Why Multi-Agent / Dual-Agent?)
 
-很多開發者初次接觸時會好奇這三者的關係：
+單一 AI 模型在長鏈條推理中，容易產生**確認偏誤（Confirmation Bias）**與**局部盲區**。
 
-* **Antigravity**：Google 的新一代 Agentic AI 編程環境（支援全專案檢索、工具鏈執行與自回歸推演）。
-* **[Superpowers](https://github.com/obra/superpowers)**：一套專為 Coding Agents 設計的軟體工程方法論框架（提供 Brainstorming、Spec First、TDD 實作計畫與驗收紀律）。
-* **Claude Collaborator（本專案）**：一個**完全獨立、解耦的雙代理人協同引擎（Skill & CLI）**。
-  * 它**不強制綁定**任何特定框架；
-  * 它可以作為 **純命令列工具（CLI）** 供工程師直接在 Terminal 使用；
-  * 也可以作為 **Skill 插件** 完美嵌入 **Superpowers**、**Antigravity**、**Claude Code** 或 **Cursor** 中，為開發流程加入「架構諮詢」與「代碼審查」的第二道防線。
+本系統建立了一套**跨模型結對協作模式**：
+- **主執行者 (Host Orchestrator - 如 Antigravity / Gemini / Cursor)**：負責全專案上下文感知、跨檔案重構、測試運行與進度推演。
+- **外部專家與審查員 (External Reviewer - 如 Claude CLI / Codex)**：負責深層系統架構、邊界條件推演、Prompt 精煉與客觀 Code Review。
+
+```mermaid
+flowchart LR
+    subgraph Host["主工作環境 (Antigravity / Cursor / Terminal)"]
+        Context["專案上下文檢索與組裝"]
+        Exec["檔案生成與測試驗證"]
+    end
+
+    subgraph PeerAgents["外部協作 Agent (Claude / Codex / ...)"]
+        Design["架構設計與權衡 (claude-design)"]
+        Refine["Prompt / 規格精煉 (claude-refine)"]
+        Review["嚴格代碼審查 (claude-review)"]
+    end
+
+    Context --> Design --> Exec
+    Context --> Refine --> Exec
+    Exec --> Review --> Done(["驗收完成"])
+```
 
 ---
 
 ## ⚡ 核心能力與指令
 
-安裝後，您可以在任何專案或終端機中直接使用以下命令（或由 Agent 調用）：
+安裝後，您可以在任何專案或終端機中直接使用以下命令（或由 Agent 自動調用）：
 
 | 指令 / 腳本 | 用途 | 使用範例 |
 | :--- | :--- | :--- |
@@ -50,31 +65,35 @@
 
 ---
 
-## 🚀 二、 安裝 Claude Collaborator (雙代理人協作者)
+## 🚀 二、 安裝 Agent Collaborator
 
-### 1. 前置需求
-* 本地已安裝並授權的 [Claude Code CLI](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) (`claude`)。
-
-### 2. 執行安裝腳本
+### 1. 取得專案並執行安裝
 
 ```bash
-git clone https://github.com/gogog22510/claude-collaborator.git
-cd claude-collaborator
+git clone https://github.com/gogog22510/agent-collaborator.git
+cd agent-collaborator
 ./install.sh
 ```
 
-選單支援：
-1. **All (CLI Tools + Antigravity Global + Claude Code Global)** [推薦全裝]
-2. **Standalone CLI Tools only**（將指令連結至 `~/.local/bin`）
-3. **Antigravity Global Skills**（安裝至 `~/.gemini/skills/`）
-4. **Project-Local Skill**（安裝至當前專案的 `.agent/skills/`）
-5. **Claude Code Global Skills**（安裝至 `~/.claude/skills/`）
+### 2. 選擇安裝模式
+
+```text
+======================================================
+  🤝 Agent Collaborator Universal Installer
+======================================================
+Select an installation target:
+  1) All (CLI Tools + Antigravity Global + Claude Code Global) [推薦全裝]
+  2) Standalone CLI Tools only (~/.local/bin/claude-design, ...)
+  3) Antigravity Global Skills (~/.gemini/...)
+  4) Project-Local Skill (.agent/skills/ in current directory)
+  5) Claude Code Global Skills (~/.claude/skills/)
+```
 
 ---
 
-## 🌟 三、 Superpowers + Claude Collaborator 黃金流水線
+## 🌟 三、 Superpowers + Agent Collaborator 黃金流水線
 
-當 Superpowers 結合 Claude Collaborator 時，能形成極高質量的自動化工程閉環：
+當 Superpowers 結合 Agent Collaborator 時，能形成極高質量的自動化工程閉環：
 
 ```mermaid
 flowchart TD
@@ -84,8 +103,8 @@ flowchart TD
         T --> V["Verification<br/>(最終驗證與交付)"]
     end
 
-    subgraph ClaudeReview["2. Claude Collaborator 雙模型把關"]
-        CD["claude-design<br/>(架構可行性與狀態機對照)"]
+    subgraph PeerReview["2. Agent Collaborator 多模型把關"]
+        CD["claude-design / codex-design<br/>(架構可行性與狀態機對照)"]
         CR["claude-refine<br/>(規格與 Prompt 精煉)"]
         CW["claude-review<br/>(Git Diff 嚴格代碼審查)"]
     end
@@ -109,7 +128,7 @@ flowchart TD
 
 ## 🛡️ 自動優雅降級機制 (Graceful Self-Healing Fallback)
 
-當本地 `claude` CLI 遇到 API 額度用盡 (Usage Limit)、Rate Limit (429) 或連線超載 (529) 時，腳本會自動輸出 `⚠️ [FALLBACK_TRIGGERED: CLAUDE_UNAVAILABLE]`（Exit Code: `100`），主代理人（Antigravity）會無縫接管架構或審查工作，**絕不中斷任務**。
+當外部 Agent 遇到 API 額度用盡 (Usage Limit)、Rate Limit (429) 或連線超載 (529) 時，腳本會自動輸出 `⚠️ [FALLBACK_TRIGGERED: ...]`（Exit Code: `100`），主代理人會無縫接管架構或審查工作，**絕不中斷任務流水線**。
 
 ---
 

@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Universal Modular Installer for claude-collaborator
-# Supports:
-#   1. Standalone CLI tools (~/.local/bin: claude-design, claude-review, ...)
-#   2. Antigravity Global Skill (~/.gemini/skills & ~/.gemini/config/skills)
-#   3. Project-Local / Superpowers Skill (.agent/skills or .claude/skills)
-#   4. Claude Code Global Skill (~/.claude/skills)
+# Universal Modular Installer for agent-collaborator (Claude / Codex / Cursor)
 # ==============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_SRC="$SCRIPT_DIR/skills/claude-collaborator"
+SKILL_SRC="$SCRIPT_DIR/skills/agent-collaborator"
 
 # Color helpers
 GREEN="\033[0;32m"
@@ -21,7 +16,7 @@ NC="\033[0m" # No Color
 
 print_banner() {
   echo -e "${BLUE}======================================================${NC}"
-  echo -e "${GREEN}  🤝 Claude Collaborator Universal Installer${NC}"
+  echo -e "${GREEN}  🤝 Agent Collaborator Universal Installer${NC}"
   echo -e "${BLUE}======================================================${NC}"
 }
 
@@ -48,10 +43,14 @@ install_cli() {
 
 install_antigravity_global() {
   echo -e "\n${BLUE}▶ Installing to Antigravity Global Skills (~/.gemini)...${NC}"
-  TARGET_1="$HOME/.gemini/config/skills/claude-collaborator"
-  TARGET_2="$HOME/.gemini/skills/claude-collaborator"
+  TARGET_PATHS=(
+    "$HOME/.gemini/config/skills/agent-collaborator"
+    "$HOME/.gemini/skills/agent-collaborator"
+    "$HOME/.gemini/config/skills/claude-collaborator"
+    "$HOME/.gemini/skills/claude-collaborator"
+  )
 
-  for T in "$TARGET_1" "$TARGET_2"; do
+  for T in "${TARGET_PATHS[@]}"; do
     mkdir -p "$T/scripts"
     cp "$SKILL_SRC/SKILL.md" "$T/"
     cp "$SKILL_SRC/scripts/"*.sh "$T/scripts/"
@@ -62,7 +61,7 @@ install_antigravity_global() {
 
 install_claude_code_global() {
   echo -e "\n${BLUE}▶ Installing to Claude Code Global Skills (~/.claude/skills)...${NC}"
-  TARGET="$HOME/.claude/skills/claude-collaborator"
+  TARGET="$HOME/.claude/skills/agent-collaborator"
   mkdir -p "$TARGET/scripts"
   cp "$SKILL_SRC/SKILL.md" "$TARGET/"
   cp "$SKILL_SRC/scripts/"*.sh "$TARGET/scripts/"
@@ -75,20 +74,18 @@ install_project_local() {
   echo -e "\n${BLUE}▶ Installing Project-Local Skill into: $TARGET_DIR...${NC}"
 
   # Support .agent/skills (Antigravity / Superpowers) and .claude/skills
-  AGENT_TARGET="$TARGET_DIR/.agent/skills/claude-collaborator"
-  CLAUDE_TARGET="$TARGET_DIR/.claude/skills/claude-collaborator"
+  AGENT_TARGET_1="$TARGET_DIR/.agent/skills/agent-collaborator"
+  AGENT_TARGET_2="$TARGET_DIR/.agent/skills/claude-collaborator"
+  CLAUDE_TARGET="$TARGET_DIR/.claude/skills/agent-collaborator"
 
-  mkdir -p "$AGENT_TARGET/scripts" "$CLAUDE_TARGET/scripts"
-  
-  cp "$SKILL_SRC/SKILL.md" "$AGENT_TARGET/"
-  cp "$SKILL_SRC/scripts/"*.sh "$AGENT_TARGET/scripts/"
-  chmod +x "$AGENT_TARGET/scripts/"*.sh
+  for D in "$AGENT_TARGET_1" "$AGENT_TARGET_2" "$CLAUDE_TARGET"; do
+    mkdir -p "$D/scripts"
+    cp "$SKILL_SRC/SKILL.md" "$D/"
+    cp "$SKILL_SRC/scripts/"*.sh "$D/scripts/"
+    chmod +x "$D/scripts/"*.sh
+  done
 
-  cp "$SKILL_SRC/SKILL.md" "$CLAUDE_TARGET/"
-  cp "$SKILL_SRC/scripts/"*.sh "$CLAUDE_TARGET/scripts/"
-  chmod +x "$CLAUDE_TARGET/scripts/"*.sh
-
-  echo -e "${GREEN}✓ Local skill installed into $AGENT_TARGET and $CLAUDE_TARGET${NC}"
+  echo -e "${GREEN}✓ Local skills installed into $AGENT_TARGET_1 and $CLAUDE_TARGET${NC}"
 }
 
 show_menu() {
@@ -129,7 +126,6 @@ show_menu() {
 
 # CLI Argument parsing
 if [ $# -eq 0 ]; then
-  # Interactive mode if TTY, else default to all
   if [ -t 0 ]; then
     show_menu
   else
