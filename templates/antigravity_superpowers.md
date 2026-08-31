@@ -1,54 +1,54 @@
-# ⚡ Superpowers + Claude Collaborator 完整整合指南
+# ⚡ Superpowers + Agent Collaborator Complete Integration Guide
 
-## 1. 什麼是 Superpowers？
+## 1. What is Superpowers?
 
-[Superpowers](https://github.com/obra/superpowers) 是由社群維護的開源 Coding Agent 軟體工程方法論框架。它為 AI 代理人提供了：
-* **Brainstorming & Spec First**：在寫 code 之前，先引導使用者釐清需求並拆解成小塊規格。
-* **TDD & Implementation Planning**：撰寫嚴格的紅/綠單元測試與分步實作計畫。
-* **Single-Flow Execution & Verification**：單流任務推進與強制交付驗收紀律。
+[Superpowers](https://github.com/obra/superpowers) is an open-source software engineering methodology framework for AI coding agents. It equips AI agents with:
+* **Brainstorming & Spec First**: Guided exploration of user requirements decomposed into bite-sized specifications before writing code.
+* **TDD & Implementation Planning**: Structured red/green unit testing with step-by-step implementation plans.
+* **Single-Flow Execution & Verification**: Disciplined task execution with rigorous acceptance verification.
 
 ---
 
-## 2. 如何安裝 Superpowers？
+## 2. Installing Superpowers
 
-根據您使用的主程式環境進行安裝：
+Install Superpowers depending on your primary driver environment:
 
 ### 🌐 Antigravity
-在終端機中執行：
+Run in your terminal:
 ```bash
 agy plugin install https://github.com/obra/superpowers
 ```
-*(若無 `agy` 指令，亦可直接將 repo clone 至 `~/.gemini/config/plugins/superpowers` 或專案目錄的 `.agent/skills/`)*
+*(If `agy` CLI is not installed, you can clone the repository directly into `~/.gemini/config/plugins/superpowers` or your project's `.agent/skills/` directory)*
 
 ### 🤖 Claude Code
-在 Claude Code 對話中輸入：
+In Claude Code chat:
 ```text
 /plugin install superpowers@claude-plugins-official
 ```
-或新增社群市集：
+Or add the community marketplace:
 ```text
 /plugin marketplace add obra/superpowers-marketplace
 /plugin install superpowers@superpowers-marketplace
 ```
 
 ### 🖱️ Cursor
-在 Cursor Agent 聊天框中輸入：
+In Cursor Agent chat:
 ```text
 /add-plugin superpowers
 ```
 
 ---
 
-## 3. 將 Claude Collaborator 注入 Superpowers 工作流
+## 3. Injecting Agent Collaborator into the Superpowers Workflow
 
-安裝完 Superpowers 後，將 `claude-collaborator` 安裝為雙代理人協作者：
+After installing Superpowers, install `claude-collaborator` as your peer agent collaborator:
 
 ```bash
 cd /path/to/your/project
-/path/to/claude-collaborator/install.sh --project .
+/path/to/agent-collaborator/install.sh --project .
 ```
 
-接著在專案根目錄的 `.agent/AGENTS.md` 加入以下契約：
+Then append the following collaboration protocol to `.agent/AGENTS.md` at your project root:
 
 ```markdown
 # 🤝 Multi-Agent Peer Collaboration & Verification Protocol
@@ -69,23 +69,23 @@ cd /path/to/your/project
 
 ---
 
-## 4. 雙代理人 + Superpowers 的黃金流水線
+## 4. Multi-Agent + Superpowers Golden Pipeline
 
-當 Superpowers 遇上 Agent Collaborator 時，每個階段都有多模型把關：
+When Superpowers is combined with Agent Collaborator, every engineering milestone is double-checked by peer models:
 
 ```mermaid
 flowchart TD
-    subgraph SuperpowersFlow["Superpowers 工程方法論"]
-        B["1. Brainstorming (需求探索)"]
-        P["2. Writing Plans (撰寫實作計畫)"]
-        T["3. TDD Execution (單元測試與寫代碼)"]
-        V["4. Verification (驗證與交付)"]
+    subgraph SuperpowersFlow["Superpowers Engineering Methodology"]
+        B["1. Brainstorming (Requirement & Spec Exploration)"]
+        P["2. Writing Plans (Structured Implementation Plan)"]
+        T["3. TDD Execution (Red/Green Testing & Code Implementation)"]
+        V["4. Verification (End-to-End Proof & Delivery)"]
     end
 
-    subgraph PeerAdvisors["🏛️ 外部專家顧問團 (Claude / Codex / Extensible)"]
-        CD["claude-design / codex-design<br/>(架構可行性與邊界對照)"]
-        CR["claude-refine<br/>(規格與 Prompt 精煉)"]
-        CW["claude-review / codex-review<br/>(Git Diff 嚴格代碼審查)"]
+    subgraph PeerAdvisors["🏛️ Peer Advisory Council (Claude / Codex / Extensible)"]
+        CD["claude-design / codex-design<br/>(Architecture Validation & Boundary Check)"]
+        CR["claude-refine<br/>(Spec & Prompt Refinement)"]
+        CW["claude-review / codex-review<br/>(Strict Git Diff Code Review)"]
     end
 
     B -.-> CD
