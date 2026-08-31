@@ -1,30 +1,181 @@
 #!/usr/bin/env bash
-# Universal Installer for claude-collaborator skill
-# Usage:
-#   ./install.sh           # Installs globally to ~/.gemini/config/skills/claude-collaborator
-#   ./install.sh --local   # Installs into current project's .agent/skills/claude-collaborator
+# ==============================================================================
+# Universal Modular Installer for claude-collaborator
+# Supports:
+#   1. Standalone CLI tools (~/.local/bin: claude-design, claude-review, ...)
+#   2. Antigravity Global Skill (~/.gemini/skills & ~/.gemini/config/skills)
+#   3. Project-Local / Superpowers Skill (.agent/skills or .claude/skills)
+#   4. Claude Code Global Skill (~/.claude/skills)
+# ==============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_SOURCE="$SCRIPT_DIR/skills/claude-collaborator"
+SKILL_SRC="$SCRIPT_DIR/skills/claude-collaborator"
 
-MODE="${1:---global}"
+# Color helpers
+GREEN="\033[0;32m"
+BLUE="\033[0;34m"
+YELLOW="\033[1;33m"
+NC="\033[0m" # No Color
 
-if [ "$MODE" == "--local" ]; then
-  TARGET_DIR="$(pwd)/.agent/skills/claude-collaborator"
-  echo "🚀 Installing claude-collaborator locally to: $TARGET_DIR"
+print_banner() {
+  echo -e "${BLUE}======================================================${NC}"
+  echo -e "${GREEN}  🤝 Claude Collaborator Universal Installer${NC}"
+  echo -e "${BLUE}======================================================${NC}"
+}
+
+install_cli() {
+  echo -e "\n${BLUE}▶ Installing Standalone CLI tools (~/.local/bin)...${NC}"
+  BIN_DIR="$HOME/.local/bin"
+  mkdir -p "$BIN_DIR"
+
+  ln -sf "$SKILL_SRC/scripts/claude_design.sh" "$BIN_DIR/claude-design"
+  ln -sf "$SKILL_SRC/scripts/claude_review.sh" "$BIN_DIR/claude-review"
+  ln -sf "$SKILL_SRC/scripts/claude_refine.sh" "$BIN_DIR/claude-refine"
+  ln -sf "$SKILL_SRC/scripts/claude_prompt_tune.sh" "$BIN_DIR/claude-prompt-tune"
+
+  chmod +x "$BIN_DIR/claude-design" "$BIN_DIR/claude-review" "$BIN_DIR/claude-refine" "$BIN_DIR/claude-prompt-tune"
+  echo -e "${GREEN}✓ CLI tools linked:${NC}"
+  echo "    - $BIN_DIR/claude-design"
+  echo "    - $BIN_DIR/claude-review"
+  echo "    - $BIN_DIR/claude-refine"
+  echo "    - $BIN_DIR/claude-prompt-tune"
+  if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+    echo -e "${YELLOW}  ⚠ Note: Ensure $BIN_DIR is in your PATH in ~/.zshrc or ~/.bashrc${NC}"
+  fi
+}
+
+install_antigravity_global() {
+  echo -e "\n${BLUE}▶ Installing to Antigravity Global Skills (~/.gemini)...${NC}"
+  TARGET_1="$HOME/.gemini/config/skills/claude-collaborator"
+  TARGET_2="$HOME/.gemini/skills/claude-collaborator"
+
+  for T in "$TARGET_1" "$TARGET_2"; do
+    mkdir -p "$T/scripts"
+    cp "$SKILL_SRC/SKILL.md" "$T/"
+    cp "$SKILL_SRC/scripts/"*.sh "$T/scripts/"
+    chmod +x "$T/scripts/"*.sh
+    echo -e "${GREEN}✓ Installed to $T${NC}"
+  done
+}
+
+install_claude_code_global() {
+  echo -e "\n${BLUE}▶ Installing to Claude Code Global Skills (~/.claude/skills)...${NC}"
+  TARGET="$HOME/.claude/skills/claude-collaborator"
+  mkdir -p "$TARGET/scripts"
+  cp "$SKILL_SRC/SKILL.md" "$TARGET/"
+  cp "$SKILL_SRC/scripts/"*.sh "$TARGET/scripts/"
+  chmod +x "$TARGET/scripts/"*.sh
+  echo -e "${GREEN}✓ Installed to $TARGET${NC}"
+}
+
+install_project_local() {
+  local TARGET_DIR="${1:-$(pwd)}"
+  echo -e "\n${BLUE}▶ Installing Project-Local Skill into: $TARGET_DIR...${NC}"
+
+  # Support .agent/skills (Antigravity / Superpowers) and .claude/skills
+  AGENT_TARGET="$TARGET_DIR/.agent/skills/claude-collaborator"
+  CLAUDE_TARGET="$TARGET_DIR/.claude/skills/claude-collaborator"
+
+  mkdir -p "$AGENT_TARGET/scripts" "$CLAUDE_TARGET/scripts"
+  
+  cp "$SKILL_SRC/SKILL.md" "$AGENT_TARGET/"
+  cp "$SKILL_SRC/scripts/"*.sh "$AGENT_TARGET/scripts/"
+  chmod +x "$AGENT_TARGET/scripts/"*.sh
+
+  cp "$SKILL_SRC/SKILL.md" "$CLAUDE_TARGET/"
+  cp "$SKILL_SRC/scripts/"*.sh "$CLAUDE_TARGET/scripts/"
+  chmod +x "$CLAUDE_TARGET/scripts/"*.sh
+
+  echo -e "${GREEN}✓ Local skill installed into $AGENT_TARGET and $CLAUDE_TARGET${NC}"
+}
+
+show_menu() {
+  print_banner
+  echo "Select an installation target:"
+  echo "  1) All (CLI Tools + Antigravity Global + Claude Code Global) [Recommended]"
+  echo "  2) Standalone CLI Tools only (~/.local/bin/claude-design, ...)"
+  echo "  3) Antigravity Global Skills (~/.gemini/...)"
+  echo "  4) Project-Local Skill (.agent/skills/ in current directory)"
+  echo "  5) Claude Code Global Skills (~/.claude/skills/)"
+  echo "  q) Quit"
+  echo ""
+  read -rp "Enter choice [1-5]: " choice
+  case "$choice" in
+    1)
+      install_cli
+      install_antigravity_global
+      install_claude_code_global
+      ;;
+    2)
+      install_cli
+      ;;
+    3)
+      install_antigravity_global
+      ;;
+    4)
+      install_project_local "$(pwd)"
+      ;;
+    5)
+      install_claude_code_global
+      ;;
+    *)
+      echo "Installation cancelled."
+      exit 0
+      ;;
+  esac
+}
+
+# CLI Argument parsing
+if [ $# -eq 0 ]; then
+  # Interactive mode if TTY, else default to all
+  if [ -t 0 ]; then
+    show_menu
+  else
+    print_banner
+    install_cli
+    install_antigravity_global
+    install_claude_code_global
+  fi
 else
-  TARGET_DIR="$HOME/.gemini/config/skills/claude-collaborator"
-  echo "🚀 Installing claude-collaborator globally to: $TARGET_DIR"
+  print_banner
+  case "$1" in
+    --all)
+      install_cli
+      install_antigravity_global
+      install_claude_code_global
+      ;;
+    --cli)
+      install_cli
+      ;;
+    --antigravity-global|--gemini|--global)
+      install_antigravity_global
+      ;;
+    --claude-code)
+      install_claude_code_global
+      ;;
+    --project|--local)
+      TARGET_PATH="${2:-$(pwd)}"
+      install_project_local "$TARGET_PATH"
+      ;;
+    --help|-h)
+      echo "Usage: ./install.sh [OPTION]"
+      echo "Options:"
+      echo "  --all                 Install CLI tools, Antigravity global, and Claude Code skills"
+      echo "  --cli                 Install standalone CLI tools to ~/.local/bin"
+      echo "  --antigravity-global  Install to ~/.gemini/skills and ~/.gemini/config/skills"
+      echo "  --claude-code         Install to ~/.claude/skills"
+      echo "  --project [PATH]      Install locally to [PATH]/.agent/skills and .claude/skills"
+      echo "  --help                Show this help message"
+      exit 0
+      ;;
+    *)
+      echo -e "${YELLOW}Unknown option: $1${NC}"
+      echo "Run './install.sh --help' for usage."
+      exit 1
+      ;;
+  esac
 fi
 
-mkdir -p "$TARGET_DIR/scripts"
-cp "$SKILL_SOURCE/SKILL.md" "$TARGET_DIR/"
-cp "$SKILL_SOURCE/scripts/"*.sh "$TARGET_DIR/scripts/"
-chmod +x "$TARGET_DIR/scripts/"*.sh
-
-echo "✅ claude-collaborator successfully installed to: $TARGET_DIR"
-echo ""
-echo "💡 Quick verification:"
-echo "   $TARGET_DIR/scripts/claude_design.sh \"測試連線\""
+echo -e "\n${GREEN}🎉 Installation completed successfully!${NC}\n"

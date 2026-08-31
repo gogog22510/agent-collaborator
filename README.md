@@ -1,46 +1,61 @@
-# 🤝 Claude Collaborator (雙代理人協同架構 Skill)
+# 🤝 Claude Collaborator (雙代理人協同架構 Skill & CLI)
 
-> **Antigravity (Gemini) + Claude CLI 雙代理人深度協作與交叉驗證系統**
-> 具備自動優雅降級（Graceful Fallback）與跨語言技術棧支援。
+> **Antigravity / Gemini + Claude CLI 雙代理人深度協作與交叉驗證系統**
+> 具備自動優雅降級（Graceful Fallback）、模組化安裝與跨平台技術棧支援。
 
 ---
 
-## 🌟 核心理念 (Why Dual-Agent?)
+## 🧩 概念解構：與 Antigravity / Superpowers 的關係
 
-單一 AI 模型在複雜工程與長鏈條推理中，容易產生**認知盲區（Blind Spots）**或**確認偏誤（Confirmation Bias）**。
+很多開發者初次接觸時會好奇它與其他工具的關係：
 
-`claude-collaborator` 建立了一套**雙模型協同（Dual-Agent Pair Programming）架構**：
-- **Orchestrator & Implementer (Antigravity / Gemini)**：負責全專案上下文檢索、跨檔案重構、工具鏈執行、測試驗收與進度排程。
-- **Chief Architect & Reviewer (Claude CLI)**：負責深層架構決策、邊界條件推演、Prompt 精煉與高標準 Code Review。
+* **Antigravity**：Google 的新一代 Agentic AI 編程環境（支援全專案檢索、工具鏈執行與自回歸推演）。
+* **Superpowers**：為 Coding Agents 設計的一套結構化工作流（包含 Planning、單流執行與嚴格驗證紀律）。
+* **Claude Collaborator（本專案）**：一個**完全獨立、解耦的雙代理人協同引擎（Skill & CLI）**。
+  * 它**不強制綁定**任何特定框架；
+  * 它可以作為 **純命令列工具（CLI）** 供工程師直接在 Terminal 使用；
+  * 也可以作為 **Skill 模組** 載入至 **Antigravity**、**Superpowers**、**Claude Code** 或 **Cursor**。
+
+---
+
+## 🌟 核心價值：為什麼需要雙代理人？(Why Dual-Agent?)
+
+單一 AI 模型在長鏈條推理中，容易產生**確認偏誤（Confirmation Bias）**與**局部盲區**。
+
+本系統建立了一套**雙模型結對協作模式**：
+- **主執行者 (Orchestrator - 如 Antigravity / Gemini / Cursor)**：負責全專案上下文感知、跨檔案重構、測試運行與進度推演。
+- **首席架構與審查員 (Chief Reviewer - Claude CLI)**：負責深層系統架構、邊界條件推演、Prompt 精煉與客觀 Code Review。
 
 ```mermaid
 flowchart LR
-    subgraph Antigravity["Antigravity (Gemini)"]
-        Context["專案上下文探查<br/>Context Assembly"]
-        Exec["檔案生成與測試驗證<br/>Tool Execution & Test"]
+    subgraph Host["主工作環境 (Antigravity / Terminal / Cursor)"]
+        Context["專案上下文檢索與組裝"]
+        Exec["檔案生成與測試驗證"]
     end
 
-    subgraph Claude["Claude CLI (Local)"]
-        Design["架構設計與權衡<br/>claude_design.sh"]
-        Refine["Prompt/Spec 精煉<br/>claude_refine.sh"]
-        Review["嚴格代碼審查<br/>claude_review.sh"]
+    subgraph Claude["Claude CLI 協作者"]
+        Design["架構設計與權衡 (claude-design)"]
+        Refine["Prompt / 規格精煉 (claude-refine)"]
+        Review["嚴格代碼審查 (claude-review)"]
     end
 
     Context --> Design --> Exec
     Context --> Refine --> Exec
-    Exec --> Review --> Done(["任務完成驗收"])
+    Exec --> Review --> Done(["驗收完成"])
 ```
 
 ---
 
-## ⚡ 核心能力與腳本工具
+## ⚡ 核心能力與指令
 
-| 腳本 | 用途 | 呼叫方式 |
+安裝後，您可以在任何專案或終端機中直接使用以下命令（或由 Agent 調用）：
+
+| 指令 / 腳本 | 用途 | 使用範例 |
 | :--- | :--- | :--- |
-| **`claude_design.sh`** | 架構設計、狀態機、方案對照與深層探索 | `./scripts/claude_design.sh "<需求與目標>" [上下文檔案...]` |
-| **`claude_refine.sh`** | Prompt、JSON Schema、規格文件精煉優化 | `./scripts/claude_refine.sh "<目標檔案>" "<優化目標>"` |
-| **`claude_review.sh`** | Git Diff 代碼審查、潛在 Crash、邏輯漏洞與回歸預防 | `./scripts/claude_review.sh [BASE_REF] "<任務描述>"` |
-| **`claude_prompt_tune.sh`** | 針對特定領域 Prompt 進行專項調整 | `./scripts/claude_prompt_tune.sh "<PROMPT_FILE>" "<目標>"` |
+| **`claude-design`** | 系統架構、狀態機、演算法方案對照與深層探索 | `claude-design "<需求描述>" [上下文檔案...]` |
+| **`claude-refine`** | Prompt、JSON Schema、規格文件專項精煉優化 | `claude-refine "<目標檔案>" "<優化目標>"` |
+| **`claude-review`** | Git Diff 審查、防範 Crash、邏輯漏洞與回歸風險 | `claude-review HEAD "<任務背景描述>"` |
+| **`claude-prompt-tune`** | 領域 Prompt 專案調優 | `claude-prompt-tune "<PROMPT檔案>" "<目標>"` |
 
 ---
 
@@ -55,45 +70,49 @@ flowchart LR
 
 ---
 
-## 🚀 快速安裝與設定 (Installation)
+## 🚀 模組化一鍵安裝 (Modular Installation)
 
 ### 1. 前置需求
-* 本地已安裝並授權 [Claude Code CLI](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) (`claude`)。
-* 具備 Bash 環境（macOS / Linux / Windows WSL）。
+* 本地已安裝並完成登入授權的 [Claude Code CLI](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) (`claude`)。
 
-### 2. 一鍵安裝
+### 2. 執行安裝
 
-#### 🌐 全域安裝 (Global - 適用於本機所有專案)
 ```bash
 git clone https://github.com/gogog22510/claude-collaborator.git
 cd claude-collaborator
 ./install.sh
-# 安裝至 ~/.gemini/config/skills/claude-collaborator
 ```
 
-#### 📁 專案本地安裝 (Local - 僅限當前專案)
-```bash
-cd /path/to/your/project
-/path/to/claude-collaborator/install.sh --local
-# 安裝至 .agent/skills/claude-collaborator
+執行後會出現互動式選單，您可以依使用習慣選擇：
+
+```text
+======================================================
+  🤝 Claude Collaborator Universal Installer
+======================================================
+Select an installation target:
+  1) All (CLI Tools + Antigravity Global + Claude Code Global) [Recommended]
+  2) Standalone CLI Tools only (~/.local/bin/claude-design, ...)
+  3) Antigravity Global Skills (~/.gemini/...)
+  4) Project-Local Skill (.agent/skills/ in current directory)
+  5) Claude Code Global Skills (~/.claude/skills/)
 ```
+
+### 3. 非互動式參數（CI / Script 適用）
+
+* **全裝推薦**：`./install.sh --all`
+* **僅終端機 CLI**：`./install.sh --cli`（連結至 `~/.local/bin`）
+* **Antigravity 全域**：`./install.sh --antigravity-global`（裝入 `~/.gemini/skills/`）
+* **指定專案本地**：`./install.sh --project /path/to/project`（裝入該專案的 `.agent/skills/`）
 
 ---
 
-## 📖 如何在專案中啟用 (Integration)
+## 📖 各環境配置範本 (Integration Templates)
 
-在專案根目錄的 `AGENTS.md`、`RULES.md` 或系統提示中加入以下約定：
+本專案提供多種環境的整合範本（位於 `templates/`）：
 
-```markdown
-## Claude Collaborator Workflow (Dual-Agent Mode)
-
-**Mandatory Rule for Design & Review**: For ANY architectural design, feature planning, prompt/spec tuning, or system exploration:
-- **Always proactively consult and discuss with Claude** (`claude-collaborator` skill) to cross-reference designs, explore trade-offs, and validate assumptions before finalizing plans or writing major code.
-- Use `claude_design.sh` for architectural/state design, solution comparison, and deep research before writing code.
-- Use `claude_refine.sh` for prompts, schemas, specs, or domain documents.
-- Use `claude_review.sh` for code review and regression checking before claiming completion of critical tasks.
-- If Claude hits usage limits or connection issues, seamlessly follow the self-healing fallback protocol without halting the task.
-```
+1. **Antigravity / Superpowers**：參考 [`templates/antigravity_superpowers.md`](templates/antigravity_superpowers.md)，加入專案的 `AGENTS.md`。
+2. **Cursor / Windsurf**：參考 [`templates/cursor_rules.md`](templates/cursor_rules.md)，貼入 `.cursorrules`。
+3. **Claude Code**：參考 [`templates/claude_code.md`](templates/claude_code.md)，貼入 `CLAUDE.md`。
 
 ---
 
