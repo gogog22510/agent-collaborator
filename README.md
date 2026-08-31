@@ -1,41 +1,48 @@
 # 🤝 Agent Collaborator (多代理人協同架構 Skill & CLI)
 
-> **Antigravity / Gemini + Claude CLI / Codex / Cursor 多代理人深度協作與交叉驗證系統**
+> **以 Antigravity 作為總指揮核心（Central Orchestrator），調度 Claude CLI / Codex / Cursor 外部專家的多代理人深度協作與交叉驗證系統。**
 > 具備自動優雅降級（Graceful Fallback）、模組化安裝與 Superpowers 工作流無縫整合。
 
 ---
 
-## 🌟 核心理念：為什麼需要多代理人？(Why Multi-Agent / Dual-Agent?)
+## 🌟 核心分工：Antigravity 作為總指揮 (Orchestrator Architecture)
 
-單一 AI 模型在長鏈條推理中，容易產生**確認偏誤（Confirmation Bias）**與**局部盲區**。
+在現代軟體工程中，單一模型往往難以同時兼顧「全域專案感知」與「嚴苛的局部邏輯推理」。
 
-本系統建立了一套**跨模型結對協作模式**：
-- **主執行者 (Host Orchestrator - 如 Antigravity / Gemini / Cursor)**：負責全專案上下文感知、跨檔案重構、測試運行與進度推演。
-- **外部專家與審查員 (External Reviewer - 如 Claude CLI / Codex)**：負責深層系統架構、邊界條件推演、Prompt 精煉與客觀 Code Review。
+`agent-collaborator` 的核心架構是由 **Google Antigravity (Gemini)** 擔任**總指揮官與主執行者（Central Orchestrator & Implementer）**，並在關鍵決策節點主動調度 **Claude CLI / Codex 等外部專家（Peer Experts）**：
 
 ```mermaid
-flowchart LR
-    subgraph Host["主工作環境 (Antigravity / Cursor / Terminal)"]
-        Context["專案上下文檢索與組裝"]
-        Exec["檔案生成與測試驗證"]
+flowchart TD
+    subgraph Orchestrator["👑 Antigravity (總指揮與執行核心 / Central Orchestrator)"]
+        direction TB
+        Awareness["🧠 全專案上下文感知與檢索<br/>(Gemini 超大 Context Window 掌握全域架構)"]
+        Engine["⚙️ 工具鏈驅動與檔案重構<br/>(編譯、執行單元測試、Git 操作、熱重載)"]
+        Supervisor["🛡️ 流程推進、自癒降級與最終交付<br/>(Task Tracker & Self-Healing Fallback)"]
     end
 
-    subgraph PeerAgents["外部協作 Agent (Claude / Codex / ...)"]
-        Design["架構設計與權衡 (claude-design)"]
-        Refine["Prompt / 規格精煉 (claude-refine)"]
-        Review["嚴格代碼審查 (claude-review)"]
+    subgraph PeerCouncil["🏛️ 外部專家顧問團 (External Peer Agents)"]
+        direction TB
+        Claude["🤖 Claude CLI<br/>• 系統架構與狀態機設計 (claude-design)<br/>• Prompt / 規格精煉 (claude-refine)<br/>• Git Diff 嚴格代碼審查 (claude-review)"]
+        Codex["🧩 OpenAI Codex (未來擴充)<br/>• 演算法與特定語言最佳化"]
     end
 
-    Context --> Design --> Exec
-    Context --> Refine --> Exec
-    Exec --> Review --> Done(["驗收完成"])
+    Awareness -->|1. 提取精準上下文並發起諮詢| Claude
+    Claude -->|2. 回傳架構決策 / 審查建議| Engine
+    Engine -->|3. 執行寫代碼與 TDD 驗證| Supervisor
+    Supervisor -->|4. 再次發起 Pre-flight 審查| Claude
+    Supervisor --> Done(["🏁 任務高標準驗收交付"])
 ```
+
+### 為什麼由 Antigravity 擔任總指揮？
+1. **龐大的上下文吞吐量（Context Capacity）**：Antigravity 具備強大的全專案跨檔案檢索與上下文組裝能力，能精確為外部專家準備最相關的程式碼切片。
+2. **完整的工具鏈執行權限（Toolchain Orchestration）**：Antigravity 原生支援終端命令執行、測試套件驗收、檔案增刪與版本控制。
+3. **主動協調與容錯能力（Active Coordination & Fallback）**：Antigravity 負責維護任務清單與推進狀態，當外部專家 API 額度用盡或連線異常時，Antigravity 會自動無縫接管，確保工作流永不中斷。
 
 ---
 
 ## ⚡ 核心能力與指令
 
-安裝後，您可以在任何專案或終端機中直接使用以下命令（或由 Agent 自動調用）：
+安裝後，您可以直接在終端機使用（或由 Antigravity 自動調度調用）：
 
 | 指令 / 腳本 | 用途 | 使用範例 |
 | :--- | :--- | :--- |
@@ -91,27 +98,27 @@ Select an installation target:
 
 ---
 
-## 🌟 三、 Superpowers + Agent Collaborator 黃金流水線
+## 🌟 三、 Superpowers + Antigravity 總指揮流水線
 
-當 Superpowers 結合 Agent Collaborator 時，能形成極高質量的自動化工程閉環：
+當 Superpowers 結合 Antigravity + Agent Collaborator 時，每個階段都能達成雙模型把關：
 
 ```mermaid
 flowchart TD
-    subgraph Superpowers["1. Superpowers 工程方法論"]
-        B["Brainstorming<br/>(需求與規格探索)"] --> P["Writing Plans<br/>(實作計畫撰寫)"]
-        P --> T["TDD Execution<br/>(紅綠測試與實作)"]
-        T --> V["Verification<br/>(最終驗證與交付)"]
+    subgraph AntigravitySuperpowers["👑 Antigravity 總指揮 + Superpowers 方法論"]
+        B["1. Brainstorming<br/>(需求與規格探索)"] --> P["2. Writing Plans<br/>(實作計畫撰寫)"]
+        P --> T["3. TDD Execution<br/>(紅綠測試與實作)"]
+        T --> V["4. Verification<br/>(最終驗證與交付)"]
     end
 
-    subgraph PeerReview["2. Agent Collaborator 多模型把關"]
-        CD["claude-design / codex-design<br/>(架構可行性與狀態機對照)"]
+    subgraph PeerAdvisors["🏛️ 外部專家審查 (Agent Collaborator)"]
+        CD["claude-design<br/>(架構可行性與狀態機對照)"]
         CR["claude-refine<br/>(規格與 Prompt 精煉)"]
         CW["claude-review<br/>(Git Diff 嚴格代碼審查)"]
     end
 
-    B -.->|互相探討| CD
-    P -.->|規格精煉| CR
-    T -.->|代碼審查| CW
+    B -.->|Antigravity 調度諮詢| CD
+    P -.->|Antigravity 調度精煉| CR
+    T -.->|Antigravity 調度審查| CW
     CW --> V
 ```
 
@@ -128,7 +135,7 @@ flowchart TD
 
 ## 🛡️ 自動優雅降級機制 (Graceful Self-Healing Fallback)
 
-當外部 Agent 遇到 API 額度用盡 (Usage Limit)、Rate Limit (429) 或連線超載 (529) 時，腳本會自動輸出 `⚠️ [FALLBACK_TRIGGERED: ...]`（Exit Code: `100`），主代理人會無縫接管架構或審查工作，**絕不中斷任務流水線**。
+當外部 Agent 遇到 API 額度用盡 (Usage Limit)、Rate Limit (429) 或連線超載 (529) 時，腳本會自動輸出 `⚠️ [FALLBACK_TRIGGERED: ...]`（Exit Code: `100`），總指揮（Antigravity）會無縫接管架構或審查工作，**絕不中斷任務流水線**。
 
 ---
 
