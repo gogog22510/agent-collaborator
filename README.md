@@ -1,144 +1,171 @@
-# 🤝 Agent Collaborator (多代理人協同架構 Skill & CLI)
+# 🤝 Agent Collaborator
 
-> **以 Antigravity 作為總指揮核心（Central Orchestrator），調度 Claude CLI / Codex / Cursor 外部專家的多代理人深度協作與交叉驗證系統。**
-> 具備自動優雅降級（Graceful Fallback）、模組化安裝與 Superpowers 工作流無縫整合。
+> **A Multi-Agent Peer Collaboration & Cross-Verification System orchestrated by Google Antigravity, dispatching specialized external peer agents (Claude CLI, OpenAI Codex, Cursor) with Automatic Graceful Fallback.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Orchestrator: Antigravity](https://img.shields.io/badge/Orchestrator-Antigravity-4285F4.svg)](#-architecture-antigravity-as-the-central-orchestrator)
+[![Peer: Claude CLI](https://img.shields.io/badge/Peer%20Agent-Claude%20CLI-D97706.svg)](#-core-capabilities--cli-tools)
+[![Workflow: Superpowers](https://img.shields.io/badge/Workflow-Superpowers-10B981.svg)](#-superpowers--antigravity-pipeline)
+
+[繁體中文說明文件 (Traditional Chinese Document)](README_zh.md)
 
 ---
 
-## 🌟 核心分工：Antigravity 作為總指揮 (Orchestrator Architecture)
+## 🌟 Architecture: Antigravity as the Central Orchestrator
 
-在現代軟體工程中，單一模型往往難以同時兼顧「全域專案感知」與「嚴苛的局部邏輯推理」。
+In modern software engineering, a single LLM frequently struggles to balance massive codebase context assembly with rigorous localized logic deduction.
 
-`agent-collaborator` 的核心架構是由 **Google Antigravity (Gemini)** 擔任**總指揮官與主執行者（Central Orchestrator & Implementer）**，並在關鍵決策節點主動調度 **Claude CLI / Codex 等外部專家（Peer Experts）**：
+`agent-collaborator` establishes a **Multi-Agent Pair Programming Architecture** where **Google Antigravity (Gemini)** acts as the **Central Orchestrator & Implementer**, proactively consulting and dispatching **External Peer Agents (Claude CLI, OpenAI Codex, etc.)** at critical decision milestones:
 
 ```mermaid
 flowchart TD
-    subgraph Orchestrator["👑 Antigravity (總指揮與執行核心 / Central Orchestrator)"]
+    subgraph Orchestrator["👑 Antigravity (Central Orchestrator & Implementer)"]
         direction TB
-        Awareness["🧠 全專案上下文感知與檢索<br/>(Gemini 超大 Context Window 掌握全域架構)"]
-        Engine["⚙️ 工具鏈驅動與檔案重構<br/>(編譯、執行單元測試、Git 操作、熱重載)"]
-        Supervisor["🛡️ 流程推進、自癒降級與最終交付<br/>(Task Tracker & Self-Healing Fallback)"]
+        Awareness["🧠 Global Context Assembly & Deep Awareness<br/>(Gemini Massive Context Window for Full-Project Topology)"]
+        Engine["⚙️ Toolchain Execution & Automated Refactoring<br/>(Builds, Test Runners, Git Operations, Hot Reloads)"]
+        Supervisor["🛡️ Workflow Progression, Task Management & Fallback<br/>(Task Tracker & Self-Healing Fallback Engine)"]
     end
 
-    subgraph PeerCouncil["🏛️ 外部專家顧問團 (External Peer Agents)"]
+    subgraph PeerCouncil["🏛️ External Peer Advisory Council"]
         direction TB
-        Claude["🤖 Claude CLI<br/>• 系統架構與狀態機設計 (claude-design)<br/>• Prompt / 規格精煉 (claude-refine)<br/>• Git Diff 嚴格代碼審查 (claude-review)"]
-        Codex["🧩 OpenAI Codex (未來擴充)<br/>• 演算法與特定語言最佳化"]
+        Claude["🤖 Claude CLI<br/>• System Architecture & State Machine Design (claude-design)<br/>• Prompt & Specification Refinement (claude-refine)<br/>• Pre-flight Git Diff Code Review (claude-review)"]
+        Codex["🧩 OpenAI Codex (Extensible)<br/>• Algorithmic & Language-Specific Optimizations"]
     end
 
-    Awareness -->|1. 提取精準上下文並發起諮詢| Claude
-    Claude -->|2. 回傳架構決策 / 審查建議| Engine
-    Engine -->|3. 執行寫代碼與 TDD 驗證| Supervisor
-    Supervisor -->|4. 再次發起 Pre-flight 審查| Claude
-    Supervisor --> Done(["🏁 任務高標準驗收交付"])
+    Awareness -->|1. Assemble pinpoint context & initiate consultation| Claude
+    Claude -->|2. Return architectural decision / review feedback| Engine
+    Engine -->|3. Implement code & run TDD test suite| Supervisor
+    Supervisor -->|4. Trigger pre-flight review before completion| Claude
+    Supervisor --> Done(["🏁 High-Standard Task Completion & Delivery"])
 ```
 
-### 為什麼由 Antigravity 擔任總指揮？
-1. **龐大的上下文吞吐量（Context Capacity）**：Antigravity 具備強大的全專案跨檔案檢索與上下文組裝能力，能精確為外部專家準備最相關的程式碼切片。
-2. **完整的工具鏈執行權限（Toolchain Orchestration）**：Antigravity 原生支援終端命令執行、測試套件驗收、檔案增刪與版本控制。
-3. **主動協調與容錯能力（Active Coordination & Fallback）**：Antigravity 負責維護任務清單與推進狀態，當外部專家 API 額度用盡或連線異常時，Antigravity 會自動無縫接管，確保工作流永不中斷。
+### Why Antigravity as the Orchestrator?
+1. **Massive Context Capacity**: Antigravity leverages Gemini's industry-leading context window and whole-project search capabilities to assemble precise, comprehensive code slices for external advisors.
+2. **Full Toolchain Authority**: Antigravity natively manages terminal command execution, test suite verification, file manipulation, and version control.
+3. **Active Coordination & Fault Tolerance**: Antigravity maintains task trackers and execution state. When an external peer agent encounters rate limits, token exhaustion, or connection hiccups, Antigravity seamlessly assumes the role to ensure the workflow never blocks.
 
 ---
 
-## ⚡ 核心能力與指令
+## ⚡ Core Capabilities & CLI Tools
 
-安裝後，您可以直接在終端機使用（或由 Antigravity 自動調度調用）：
+Once installed, you can use these tools directly in any terminal or allow Antigravity to automatically orchestrate them:
 
-| 指令 / 腳本 | 用途 | 使用範例 |
+| Command / Script | Purpose | Usage Example |
 | :--- | :--- | :--- |
-| **`claude-design`** | 系統架構、狀態機、演算法方案對照與深層探索 | `claude-design "<需求描述>" [上下文檔案...]` |
-| **`claude-refine`** | Prompt、JSON Schema、規格文件專項精煉優化 | `claude-refine "<目標檔案>" "<優化目標>"` |
-| **`claude-review`** | Git Diff 審查、防範 Crash、邏輯漏洞與回歸風險 | `claude-review HEAD "<任務背景描述>"` |
-| **`claude-prompt-tune`** | 領域 Prompt 專案調優 | `claude-prompt-tune "<PROMPT檔案>" "<目標>"` |
+| **`claude-design`** | System architecture, state machines, trade-off analysis & research | `claude-design "<requirement>" [context_files...]` |
+| **`claude-refine`** | Spec optimization, JSON Schema refinement & prompt tuning | `claude-refine "<target_file>" "<optimization_goal>"` |
+| **`claude-review`** | Objective Git Diff code review, crash prevention & regression check | `claude-review HEAD "<task_context_description>"` |
+| **`claude-prompt-tune`** | Domain-specific prompt engineering and optimization | `claude-prompt-tune "<prompt_file>" "<goal>"` |
 
 ---
 
-## 🚀 一、 安裝 Superpowers (先備方法論框架)
+## 🚀 1. Install Superpowers (Prerequisite Methodology)
 
-若您希望讓 Agent 具備完整的工程方法論（規格設計、TDD、實作計畫）：
+If you want your agent to follow structured engineering discipline (Brainstorming, Spec First, Implementation Plans, Red/Green TDD):
 
-* **Antigravity**：
+* **Antigravity**:
   ```bash
   agy plugin install https://github.com/obra/superpowers
   ```
-* **Claude Code**：
+* **Claude Code**:
   ```text
   /plugin install superpowers@claude-plugins-official
   ```
-* **Cursor**：
+* **Cursor**:
   ```text
   /add-plugin superpowers
   ```
 
 ---
 
-## 🚀 二、 安裝 Agent Collaborator
+## 🚀 2. Install Agent Collaborator
 
-### 1. 取得專案並執行安裝
-
+### Step 1: Clone Repository
 ```bash
 git clone https://github.com/gogog22510/agent-collaborator.git
 cd agent-collaborator
 ./install.sh
 ```
 
-### 2. 選擇安裝模式
+### Step 2: Choose Installation Mode
 
 ```text
 ======================================================
   🤝 Agent Collaborator Universal Installer
 ======================================================
 Select an installation target:
-  1) All (CLI Tools + Antigravity Global + Claude Code Global) [推薦全裝]
+  1) All (CLI Tools + Antigravity Global + Claude Code Global) [Recommended]
   2) Standalone CLI Tools only (~/.local/bin/claude-design, ...)
   3) Antigravity Global Skills (~/.gemini/...)
   4) Project-Local Skill (.agent/skills/ in current directory)
   5) Claude Code Global Skills (~/.claude/skills/)
 ```
 
+### Non-Interactive Flags (CI / Automated Scripts)
+* **Full Install**: `./install.sh --all`
+* **CLI Only**: `./install.sh --cli` (Symlinks to `~/.local/bin/`)
+* **Antigravity Global**: `./install.sh --antigravity-global` (Installs into `~/.gemini/skills/`)
+* **Project Local**: `./install.sh --project /path/to/project` (Installs into `.agent/skills/`)
+
 ---
 
-## 🌟 三、 Superpowers + Antigravity 總指揮流水線
+## 🌟 3. Superpowers + Antigravity Orchestration Pipeline
 
-當 Superpowers 結合 Antigravity + Agent Collaborator 時，每個階段都能達成雙模型把關：
+When combining Superpowers methodology with Antigravity and Agent Collaborator, every engineering milestone is double-checked by peer models:
 
 ```mermaid
 flowchart TD
-    subgraph AntigravitySuperpowers["👑 Antigravity 總指揮 + Superpowers 方法論"]
-        B["1. Brainstorming<br/>(需求與規格探索)"] --> P["2. Writing Plans<br/>(實作計畫撰寫)"]
-        P --> T["3. TDD Execution<br/>(紅綠測試與實作)"]
-        T --> V["4. Verification<br/>(最終驗證與交付)"]
+    subgraph AntigravitySuperpowers["👑 Antigravity Orchestrator + Superpowers Methodology"]
+        B["1. Brainstorming<br/>(Requirement & Spec Exploration)"] --> P["2. Writing Plans<br/>(Structured Implementation Plan)"]
+        P --> T["3. TDD Execution<br/>(Red/Green Tests & Implementation)"]
+        T --> V["4. Verification<br/>(End-to-End Proof & Delivery)"]
     end
 
-    subgraph PeerAdvisors["🏛️ 外部專家審查 (Agent Collaborator)"]
-        CD["claude-design<br/>(架構可行性與狀態機對照)"]
-        CR["claude-refine<br/>(規格與 Prompt 精煉)"]
-        CW["claude-review<br/>(Git Diff 嚴格代碼審查)"]
+    subgraph PeerAdvisors["🏛️ External Peer Advisory (Agent Collaborator)"]
+        CD["claude-design<br/>(Architecture Validation & State Topology)"]
+        CR["claude-refine<br/>(Spec & Prompt Refinement)"]
+        CW["claude-review<br/>(Strict Git Diff Code Review)"]
     end
 
-    B -.->|Antigravity 調度諮詢| CD
-    P -.->|Antigravity 調度精煉| CR
-    T -.->|Antigravity 調度審查| CW
+    B -.->|Antigravity Dispatches Consultation| CD
+    P -.->|Antigravity Dispatches Refinement| CR
+    T -.->|Antigravity Dispatches Pre-flight Review| CW
     CW --> V
 ```
 
 ---
 
-## 📖 各環境配置範本 (Integration Templates)
+## 📖 Environment Integration Templates
 
-詳細配置指引請參閱 `templates/` 目錄：
-* ⚡ **Superpowers / Antigravity 整合**：[`templates/antigravity_superpowers.md`](templates/antigravity_superpowers.md)
-* 🖱️ **Cursor / Windsurf 整合**：[`templates/cursor_rules.md`](templates/cursor_rules.md)
-* 🤖 **Claude Code 整合**：[`templates/claude_code.md`](templates/claude_code.md)
-
----
-
-## 🛡️ 自動優雅降級機制 (Graceful Self-Healing Fallback)
-
-當外部 Agent 遇到 API 額度用盡 (Usage Limit)、Rate Limit (429) 或連線超載 (529) 時，腳本會自動輸出 `⚠️ [FALLBACK_TRIGGERED: ...]`（Exit Code: `100`），總指揮（Antigravity）會無縫接管架構或審查工作，**絕不中斷任務流水線**。
+Ready-to-use integration contracts are available in the `templates/` directory:
+* ⚡ **Superpowers / Antigravity**: [`templates/antigravity_superpowers.md`](templates/antigravity_superpowers.md) (Add to `.agent/AGENTS.md`)
+* 🖱️ **Cursor / Windsurf**: [`templates/cursor_rules.md`](templates/cursor_rules.md) (Add to `.cursorrules`)
+* 🤖 **Claude Code**: [`templates/claude_code.md`](templates/claude_code.md) (Add to `CLAUDE.md`)
 
 ---
 
-## 📄 開源授權 (License)
+## 🛡️ Graceful Self-Healing Fallback
 
-本專案採用 [MIT License](LICENSE) 授權。
+When an external peer agent encounters:
+- Usage / Credit limits
+- Rate limits (429)
+- Server overload (529)
+
+The helper scripts automatically catch the error, emit `⚠️ [FALLBACK_TRIGGERED: ...]`, and exit with code `100`. The Orchestrator (Antigravity) seamlessly takes over reasoning internally, **ensuring tasks never stall**.
+
+---
+
+## 🌐 Multi-Stack Auto Detection
+
+The scripts automatically detect project configurations and tailor the prompt context:
+* `pubspec.yaml` ➔ **Dart / Flutter**
+* `package.json` ➔ **Node.js / TypeScript / JavaScript**
+* `Cargo.toml` ➔ **Rust**
+* `go.mod` ➔ **Go**
+* `pyproject.toml` / `requirements.txt` ➔ **Python**
+
+---
+
+## 📄 License
+
+Distributed under the [MIT License](LICENSE).
