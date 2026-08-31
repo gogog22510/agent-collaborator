@@ -51,21 +51,27 @@ cd /path/to/your/project
 接著在專案根目錄的 `.agent/AGENTS.md` 加入以下契約：
 
 ```markdown
-## Claude Collaborator Workflow (Dual-Agent Mode)
+# 🤝 Multi-Agent Peer Collaboration & Verification Protocol
 
-**Mandatory Rule for Design & Review**: For ANY architectural design, feature planning, prompt/spec tuning, or system exploration:
-- **Always proactively consult and discuss with Claude** (`claude-collaborator` skill) to cross-reference designs, explore trade-offs, and validate assumptions before finalizing plans or writing major code.
-- Use `claude_design.sh` for architectural/state design, solution comparison, and deep research before writing code.
-- Use `claude_refine.sh` for prompts, schemas, specs, or domain documents.
-- Use `claude_review.sh` for code review and regression checking before claiming completion of critical tasks.
-- If Claude hits usage limits or connection issues, seamlessly follow the self-healing fallback protocol without halting the task.
+## 1. Roles & Division of Labor
+- **Central Orchestrator (Antigravity / Gemini)**: Full context awareness, toolchain execution, TDD implementation, and fallback.
+- **Peer Advisory Council (Claude CLI / OpenAI Codex / Custom)**:
+  - `claude_design.sh`: Architectural design & state-machine exploration
+  - `claude_refine.sh`: Spec & prompt optimization
+  - `claude_review.sh`: Pre-flight git diff code review
+  - *(Extensible: Add Codex or custom peer agent scripts under `.agent/skills/`)*
+
+## 2. Mandatory Rules
+- **Brainstorming / Plan**: Proactively consult peer agents (`claude-design` / `claude-refine`) to cross-reference designs and explore edge cases.
+- **Pre-flight Verification**: Run `claude-review` before finalizing plans or claiming task completion.
+- **Self-Healing Fallback**: If external peers hit limits (exit code 100), Antigravity seamlessly continues internally.
 ```
 
 ---
 
 ## 4. 雙代理人 + Superpowers 的黃金流水線
 
-當 Superpowers 遇上 Claude Collaborator 時，每個階段都有雙模型把關：
+當 Superpowers 遇上 Agent Collaborator 時，每個階段都有多模型把關：
 
 ```mermaid
 flowchart TD
@@ -76,10 +82,10 @@ flowchart TD
         V["4. Verification (驗證與交付)"]
     end
 
-    subgraph ClaudeSkills["Claude Collaborator 雙模型把關"]
-        CD["claude-design<br/>(架構可行性與邊界對照)"]
+    subgraph PeerAdvisors["🏛️ 外部專家顧問團 (Claude / Codex / Extensible)"]
+        CD["claude-design / codex-design<br/>(架構可行性與邊界對照)"]
         CR["claude-refine<br/>(規格與 Prompt 精煉)"]
-        CW["claude-review<br/>(Git Diff 嚴格代碼審查)"]
+        CW["claude-review / codex-review<br/>(Git Diff 嚴格代碼審查)"]
     end
 
     B -.-> CD
