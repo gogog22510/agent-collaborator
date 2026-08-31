@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_SRC="$SCRIPT_DIR/skills/agent-collaborator"
+SKILL_SRC="$SCRIPT_DIR/skills/claude-collaborator"
 
 # Color helpers
 GREEN="\033[0;32m"
@@ -16,7 +16,7 @@ NC="\033[0m" # No Color
 
 print_banner() {
   echo -e "${BLUE}======================================================${NC}"
-  echo -e "${GREEN}  🤝 Agent Collaborator Universal Installer${NC}"
+  echo -e "${GREEN}  🤝 Claude Collaborator Universal Installer${NC}"
   echo -e "${BLUE}======================================================${NC}"
 }
 
@@ -44,8 +44,6 @@ install_cli() {
 install_antigravity_global() {
   echo -e "\n${BLUE}▶ Installing to Antigravity Global Skills (~/.gemini)...${NC}"
   TARGET_PATHS=(
-    "$HOME/.gemini/config/skills/agent-collaborator"
-    "$HOME/.gemini/skills/agent-collaborator"
     "$HOME/.gemini/config/skills/claude-collaborator"
     "$HOME/.gemini/skills/claude-collaborator"
   )
@@ -61,7 +59,7 @@ install_antigravity_global() {
 
 install_claude_code_global() {
   echo -e "\n${BLUE}▶ Installing to Claude Code Global Skills (~/.claude/skills)...${NC}"
-  TARGET="$HOME/.claude/skills/agent-collaborator"
+  TARGET="$HOME/.claude/skills/claude-collaborator"
   mkdir -p "$TARGET/scripts"
   cp "$SKILL_SRC/SKILL.md" "$TARGET/"
   cp "$SKILL_SRC/scripts/"*.sh "$TARGET/scripts/"
@@ -74,18 +72,17 @@ install_project_local() {
   echo -e "\n${BLUE}▶ Installing Project-Local Skill into: $TARGET_DIR...${NC}"
 
   # Support .agent/skills (Antigravity / Superpowers) and .claude/skills
-  AGENT_TARGET_1="$TARGET_DIR/.agent/skills/agent-collaborator"
-  AGENT_TARGET_2="$TARGET_DIR/.agent/skills/claude-collaborator"
-  CLAUDE_TARGET="$TARGET_DIR/.claude/skills/agent-collaborator"
+  AGENT_TARGET="$TARGET_DIR/.agent/skills/claude-collaborator"
+  CLAUDE_TARGET="$TARGET_DIR/.claude/skills/claude-collaborator"
 
-  for D in "$AGENT_TARGET_1" "$AGENT_TARGET_2" "$CLAUDE_TARGET"; do
+  for D in "$AGENT_TARGET" "$CLAUDE_TARGET"; do
     mkdir -p "$D/scripts"
     cp "$SKILL_SRC/SKILL.md" "$D/"
     cp "$SKILL_SRC/scripts/"*.sh "$D/scripts/"
     chmod +x "$D/scripts/"*.sh
   done
 
-  echo -e "${GREEN}✓ Local skills installed into $AGENT_TARGET_1 and $CLAUDE_TARGET${NC}"
+  echo -e "${GREEN}✓ Local skills installed into $AGENT_TARGET and $CLAUDE_TARGET${NC}"
 }
 
 show_menu() {
