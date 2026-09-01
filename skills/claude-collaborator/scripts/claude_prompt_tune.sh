@@ -40,4 +40,4 @@ $GOAL
 3. 關鍵改動原因說明。
 "
 
-claude -p "$PROMPT" < /dev/null
+echo "$PROMPT" | claude -p --tools ""

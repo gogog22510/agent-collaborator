@@ -57,7 +57,7 @@ $DIFF_SNIPPET
 TEMP_OUTPUT=$(mktemp)
 TEMP_ERR=$(mktemp)
 
-claude -p "$PROMPT" < /dev/null > "$TEMP_OUTPUT" 2> "$TEMP_ERR"
+echo "$PROMPT" | claude --safe-mode -p --tools "" > "$TEMP_OUTPUT" 2> "$TEMP_ERR"
 EXIT_CODE=$?
 
 OUTPUT_STR=$(cat "$TEMP_OUTPUT")
