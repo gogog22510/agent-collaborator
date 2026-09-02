@@ -56,10 +56,12 @@ Then append the following collaboration protocol to `.agent/AGENTS.md` at your p
 ## 1. Roles & Division of Labor
 - **Central Orchestrator (Antigravity / Gemini)**: Full context awareness, toolchain execution, TDD implementation, and fallback.
 - **Peer Advisory Council (Claude CLI / OpenAI Codex / Custom)**:
-  - `claude_design.sh`: Architectural design & state-machine exploration
-  - `claude_refine.sh`: Spec & prompt optimization
-  - `claude_review.sh`: Pre-flight git diff code review
-  - *(Extensible: Add Codex or custom peer agent scripts under `.agent/skills/`)*
+  - `claude-design` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`): Architectural design & state-machine exploration
+  - `claude-refine` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`): Spec & prompt optimization
+  - `claude-review` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`): Pre-flight git diff code review
+  - *(Extensible: Add Codex or custom peer agent scripts under `.agent/skills/` or `~/.local/bin/`)*
+
+> **Execution Note**: Directly invoke `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use the explicit absolute path `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT run `which` or search for scripts.
 
 ## 2. Mandatory Rules
 - **Brainstorming / Plan**: Proactively consult peer agents (`claude-design` / `claude-refine`) to cross-reference designs and explore edge cases.

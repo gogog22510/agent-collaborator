@@ -14,12 +14,14 @@ Add the following configuration into your project's `.agent/AGENTS.md`, `AGENTS.
 
 - **Peer Advisory Council (External Specialized Agents)**:
   - **Claude CLI (`agent-collaborator`)**:
-    - *System Architecture & State Machines*: `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh "<requirement>" [context_files...]` (or `claude-design`)
-    - *Spec, Schema & Prompt Refinement*: `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh "<target_file>" "<goal>"` (or `claude-refine`)
-    - *Pre-flight Git Diff Code Review*: `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh [BASE_REF] "<task_description>"` (or `claude-review`)
+    - *System Architecture & State Machines*: `claude-design "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`)
+    - *Spec, Schema & Prompt Refinement*: `claude-refine "<target_file>" "<goal>"` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`)
+    - *Pre-flight Git Diff Code Review*: `claude-review [BASE_REF] "<task_description>"` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`)
   - **OpenAI Codex / Specialized Peer Agents (Extensible)**:
     - *Algorithmic & Performance Optimization*: Dispatch specialized code synthesis or language-specific verifications.
     - *Cross-Model Second Opinion*: Consult secondary model when architecture trade-offs require contrasting perspectives.
+
+> **Execution Note**: Directly invoke `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use the explicit absolute path `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
 
 ---
 
