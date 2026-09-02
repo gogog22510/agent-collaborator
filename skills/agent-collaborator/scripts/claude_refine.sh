@@ -21,23 +21,22 @@ else
   exit 1
 fi
 
-PROMPT="你是一位精通文本、Prompt Engineering、規範與規格設計的高級工程專家。
-請優化以下檔案內容，以達到指定的優化目標。
-語言要求：請永遠使用繁體中文回覆。
+PROMPT="You are a Principal Engineering Lead specializing in technical specifications, JSON schemas, API contracts, and prompt engineering.
+Refine the provided target file content to achieve the specified optimization goal.
 
-【目標檔案】
+[Target File]
 $TARGET_FILE
 
-【目前內容】
+[Current Content]
 $CONTENT
 
-【優化目標】
+[Optimization Goal]
 $GOAL
 
-請輸出：
-1. 深入分析目前內容的痛點、模糊之處或潛在瓶頸。
-2. 修改後的完整優化內容（可直接作為修改版）。
-3. 關鍵改動理由與效益說明。
+Please output:
+1. Analysis of current ambiguities, bottlenecks, or edge-case gaps.
+2. The complete, production-ready refined content (ready as a direct drop-in replacement).
+3. Rationale and key improvements explained.
 "
 
 TEMP_OUTPUT=$(mktemp)
@@ -50,7 +49,7 @@ OUTPUT_STR=$(cat "$TEMP_OUTPUT")
 ERR_STR=$(cat "$TEMP_ERR")
 rm -f "$TEMP_OUTPUT" "$TEMP_ERR"
 
-# 偵測是否觸發 Usage Limit、Rate Limit 或連線失敗
+# Check for usage limits, rate limits, or connection failures
 if [ $EXIT_CODE -ne 0 ] || echo "$OUTPUT_STR $ERR_STR" | grep -qiE "(rate limit|usage limit|quota|exceeded|credit balance|overloaded|429|529|authentication)"; then
   echo "⚠️ [FALLBACK_TRIGGERED: CLAUDE_UNAVAILABLE]"
   echo "Reason: Claude CLI usage limit or connection error detected (Exit: $EXIT_CODE)."

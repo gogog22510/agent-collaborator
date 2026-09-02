@@ -14,15 +14,15 @@ shift
 
 PROJECT_HINT=""
 if [ -f "pubspec.yaml" ]; then
-  PROJECT_HINT="專案技術棧：Dart / Flutter"
+  PROJECT_HINT="Project Technology Stack: Dart / Flutter"
 elif [ -f "package.json" ]; then
-  PROJECT_HINT="專案技術棧：Node.js / TypeScript / JavaScript"
+  PROJECT_HINT="Project Technology Stack: Node.js / TypeScript / JavaScript"
 elif [ -f "Cargo.toml" ]; then
-  PROJECT_HINT="專案技術棧：Rust"
+  PROJECT_HINT="Project Technology Stack: Rust"
 elif [ -f "go.mod" ]; then
-  PROJECT_HINT="專案技術棧：Go"
+  PROJECT_HINT="Project Technology Stack: Go"
 elif [ -f "pyproject.toml" ] || [ -f "requirements.txt" ]; then
-  PROJECT_HINT="專案技術棧：Python"
+  PROJECT_HINT="Project Technology Stack: Python"
 fi
 
 FILE_CONTEXT=""
@@ -33,25 +33,25 @@ for f in "$@"; do
   fi
 done
 
-PROMPT="你是一位精通軟體架構、系統設計與演算法的資深架構師。
-語言要求：請永遠使用繁體中文回覆。
+PROMPT="You are a Principal Software Architect and Systems Engineer.
+Provide a rigorous, actionable architectural design for the specified requirement.
 
 $PROJECT_HINT
 
-【設計目標與需求】
+[Design Goal & Requirements]
 $REQUIREMENT
 
-【相關上下文檔案】
+[Relevant Context Files]
 $FILE_CONTEXT
 
-請提供結構清晰、可直接落地指導實作的架構設計方案，包含：
-1. 核心設計架構與資料流向 / 狀態管理
-2. 關鍵邊界條件、異常處理、並發安全與潛在陷阱
-3. 模組介面定義 (API / Interface / Types) 與關鍵演算法虛擬碼
-4. 推薦的實作步驟順序與單元測試建議
+Please output a structured, production-grade architectural design proposal covering:
+1. Core Architecture & Data Flow / State Management topology.
+2. Boundary conditions, error handling strategies, concurrency safety, and failure modes.
+3. Component/Interface definitions (APIs, Interfaces, Types) and key algorithm pseudocode.
+4. Recommended implementation breakdown and unit testing plan.
 "
 
-# 執行 Claude CLI 並捕捉輸出與錯誤
+# Execute Claude CLI and capture stdout / stderr
 TEMP_OUTPUT=$(mktemp)
 TEMP_ERR=$(mktemp)
 
@@ -62,7 +62,7 @@ OUTPUT_STR=$(cat "$TEMP_OUTPUT")
 ERR_STR=$(cat "$TEMP_ERR")
 rm -f "$TEMP_OUTPUT" "$TEMP_ERR"
 
-# 偵測是否觸發 Usage Limit、Rate Limit 或連線失敗
+# Check for usage limits, rate limits, or connection failures
 if [ $EXIT_CODE -ne 0 ] || echo "$OUTPUT_STR $ERR_STR" | grep -qiE "(rate limit|usage limit|quota|exceeded|credit balance|overloaded|429|529|authentication)"; then
   echo "⚠️ [FALLBACK_TRIGGERED: CLAUDE_UNAVAILABLE]"
   echo "Reason: Claude CLI usage limit or connection error detected (Exit: $EXIT_CODE)."
