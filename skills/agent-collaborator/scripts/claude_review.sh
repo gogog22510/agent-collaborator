@@ -66,7 +66,13 @@ rm -f "$TEMP_OUTPUT" "$TEMP_ERR"
 # Check for usage limits, rate limits, or connection failures
 if [ $EXIT_CODE -ne 0 ] || echo "$OUTPUT_STR $ERR_STR" | grep -qiE "(rate limit|usage limit|quota|exceeded|credit balance|overloaded|429|529|authentication)"; then
   echo "⚠️ [FALLBACK_TRIGGERED: CLAUDE_UNAVAILABLE]"
-  echo "Reason: Claude CLI usage limit or connection error detected (Exit: $EXIT_CODE)."
+  if [ $EXIT_CODE -eq 126 ] || echo "$ERR_STR" | grep -qiE "(operation not permitted|permission denied)"; then
+    echo "Reason: Sandbox execution blocked or permission denied (Exit: $EXIT_CODE). Requires BypassSandbox=true."
+  elif [ $EXIT_CODE -eq 127 ] || echo "$ERR_STR" | grep -qiE "(command not found|not found)"; then
+    echo "Reason: Claude CLI binary not found (Exit: $EXIT_CODE). Ensure claude is installed and on PATH."
+  else
+    echo "Reason: Claude CLI usage limit, connection, or execution error (Exit: $EXIT_CODE)."
+  fi
   if [ -n "$ERR_STR" ]; then
     echo "Detail: $ERR_STR"
   fi
