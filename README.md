@@ -55,7 +55,6 @@ Once installed, you can use these tools directly in any terminal or allow Antigr
 | **`claude-design`** | System architecture, state machines, trade-off analysis & research | `claude-design "<requirement>" [context_files...]` |
 | **`claude-refine`** | Spec optimization, JSON Schema refinement & prompt tuning | `claude-refine "<target_file>" "<optimization_goal>"` |
 | **`claude-review`** | Objective Git Diff code review, crash prevention & regression check | `claude-review HEAD "<task_context_description>"` |
-| **`claude-prompt-tune`** | Domain-specific prompt engineering and optimization | `claude-prompt-tune "<prompt_file>" "<goal>"` |
 
 ---
 
