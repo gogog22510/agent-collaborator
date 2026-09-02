@@ -6,7 +6,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_SRC="$SCRIPT_DIR/skills/claude-collaborator"
+SKILL_SRC="$SCRIPT_DIR/skills/agent-collaborator"
 
 # Color helpers
 GREEN="\033[0;32m"
@@ -16,7 +16,7 @@ NC="\033[0m" # No Color
 
 print_banner() {
   echo -e "${BLUE}======================================================${NC}"
-  echo -e "${GREEN}  🤝 Claude Collaborator Universal Installer${NC}"
+  echo -e "${GREEN}  🤝 Agent Collaborator Universal Installer${NC}"
   echo -e "${BLUE}======================================================${NC}"
 }
 
@@ -43,9 +43,12 @@ install_cli() {
 
 install_antigravity_global() {
   echo -e "\n${BLUE}▶ Installing to Antigravity Global Skills (~/.gemini)...${NC}"
+  # Clean up legacy claude-collaborator global dirs if present
+  rm -rf "$HOME/.gemini/config/skills/claude-collaborator" "$HOME/.gemini/skills/claude-collaborator" 2>/dev/null || true
+
   TARGET_PATHS=(
-    "$HOME/.gemini/config/skills/claude-collaborator"
-    "$HOME/.gemini/skills/claude-collaborator"
+    "$HOME/.gemini/config/skills/agent-collaborator"
+    "$HOME/.gemini/skills/agent-collaborator"
   )
 
   for T in "${TARGET_PATHS[@]}"; do
@@ -59,7 +62,10 @@ install_antigravity_global() {
 
 install_claude_code_global() {
   echo -e "\n${BLUE}▶ Installing to Claude Code Global Skills (~/.claude/skills)...${NC}"
-  TARGET="$HOME/.claude/skills/claude-collaborator"
+  # Clean up legacy claude-collaborator dir if present
+  rm -rf "$HOME/.claude/skills/claude-collaborator" 2>/dev/null || true
+
+  TARGET="$HOME/.claude/skills/agent-collaborator"
   mkdir -p "$TARGET/scripts"
   cp "$SKILL_SRC/SKILL.md" "$TARGET/"
   cp "$SKILL_SRC/scripts/"*.sh "$TARGET/scripts/"
@@ -71,9 +77,12 @@ install_project_local() {
   local TARGET_DIR="${1:-$(pwd)}"
   echo -e "\n${BLUE}▶ Installing Project-Local Skill into: $TARGET_DIR...${NC}"
 
+  # Clean up legacy project-local claude-collaborator dir if present
+  rm -rf "$TARGET_DIR/.agent/skills/claude-collaborator" 2>/dev/null || true
+
   # Support .agent/skills (Antigravity / Superpowers) and .claude/skills
-  AGENT_TARGET="$TARGET_DIR/.agent/skills/claude-collaborator"
-  CLAUDE_TARGET="$TARGET_DIR/.claude/skills/claude-collaborator"
+  AGENT_TARGET="$TARGET_DIR/.agent/skills/agent-collaborator"
+  CLAUDE_TARGET="$TARGET_DIR/.claude/skills/agent-collaborator"
 
   for D in "$AGENT_TARGET" "$CLAUDE_TARGET"; do
     mkdir -p "$D/scripts"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .agent/skills/claude-collaborator/scripts/claude_prompt_tune.sh
+# .agent/skills/agent-collaborator/scripts/claude_prompt_tune.sh
 # Usage: ./claude_prompt_tune.sh "<PROMPT_FILE>" "<OPTIMIZATION_GOAL>"
 
 set -euo pipefail

@@ -13,10 +13,10 @@ Add the following configuration into your project's `.agent/AGENTS.md`, `AGENTS.
   - **Workflow Supervision & Fallback**: Coordinates milestones and seamlessly takes over when external peers are unavailable.
 
 - **Peer Advisory Council (External Specialized Agents)**:
-  - **Claude CLI (`claude-collaborator`)**:
-    - *System Architecture & State Machines*: `claude_design.sh "<requirement>" [context_files...]`
-    - *Spec, Schema & Prompt Refinement*: `claude_refine.sh "<target_file>" "<goal>"`
-    - *Pre-flight Git Diff Code Review*: `claude_review.sh [BASE_REF] "<task_description>"`
+  - **Claude CLI (`agent-collaborator`)**:
+    - *System Architecture & State Machines*: `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh "<requirement>" [context_files...]` (or `claude-design`)
+    - *Spec, Schema & Prompt Refinement*: `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh "<target_file>" "<goal>"` (or `claude-refine`)
+    - *Pre-flight Git Diff Code Review*: `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh [BASE_REF] "<task_description>"` (or `claude-review`)
   - **OpenAI Codex / Specialized Peer Agents (Extensible)**:
     - *Algorithmic & Performance Optimization*: Dispatch specialized code synthesis or language-specific verifications.
     - *Cross-Model Second Opinion*: Consult secondary model when architecture trade-offs require contrasting perspectives.
@@ -28,11 +28,11 @@ Add the following configuration into your project's `.agent/AGENTS.md`, `AGENTS.
 At each engineering milestone, the Orchestrator MUST consult external peer agents:
 
 1. **Brainstorming & Architecture Phase**:
-   - Before finalizing design docs or making non-trivial decisions, run `claude-design` to validate state-machine transitions, component boundaries, and failure modes.
+   - Before finalizing design docs or making non-trivial decisions, run `claude-design` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`) to validate state-machine transitions, component boundaries, and failure modes.
 2. **Specification & Schema Phase**:
-   - When writing complex JSON schemas, prompt templates, or API contracts, run `claude-refine` to optimize clarity and remove ambiguity.
+   - When writing complex JSON schemas, prompt templates, or API contracts, run `claude-refine` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`) to optimize clarity and remove ambiguity.
 3. **Pre-flight Code Review Phase (Before Task Completion)**:
-   - Before claiming any feature or major bugfix is complete, run `claude-review HEAD` (or diff against base branch) to check for regressions, memory leaks, missing edge cases, and test gaps.
+   - Before claiming any feature or major bugfix is complete, run `claude-review HEAD` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh HEAD`) to check for regressions, memory leaks, missing edge cases, and test gaps.
 
 ---
 

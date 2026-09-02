@@ -41,7 +41,7 @@ In Cursor Agent chat:
 
 ## 3. Injecting Agent Collaborator into the Superpowers Workflow
 
-After installing Superpowers, install `claude-collaborator` as your peer agent collaborator:
+After installing Superpowers, install `agent-collaborator` as your peer agent collaborator:
 
 ```bash
 cd /path/to/your/project
