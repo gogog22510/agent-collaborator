@@ -17,9 +17,11 @@ Add the following configuration into your project's `.agent/AGENTS.md`, `AGENTS.
     - *System Architecture & State Machines*: `claude-design "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`)
     - *Spec, Schema & Prompt Refinement*: `claude-refine "<target_file>" "<goal>"` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`)
     - *Pre-flight Git Diff Code Review*: `claude-review [BASE_REF] "<task_description>"` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`)
-  - **OpenAI Codex / Specialized Peer Agents (Extensible)**:
-    - *Algorithmic & Performance Optimization*: Dispatch specialized code synthesis or language-specific verifications.
-    - *Cross-Model Second Opinion*: Consult secondary model when architecture trade-offs require contrasting perspectives.
+  - **OpenAI Codex (`agent-collaborator`)**:
+    - *Algorithmic, Performance & Terminal/CI Automation*: `codex-optimize "<task_or_requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`)
+    - *Cross-Model Second Opinion*: Consult Codex when architecture or review trade-offs from Claude require a contrasting perspective.
+    - *Computer Use (GUI verification)*: Codex's screen-driven mouse/keyboard control is only available via the **Codex desktop/ChatGPT app**, not this headless CLI script. If a task needs actual GUI interaction (verifying a UI in a browser/Figma/Xcode/Slack), say so explicitly and route it to a human or the Codex app — do not assume `codex-optimize` can do it.
+  - **Other Specialized Peer Agents (Extensible)**: see Section 3 below.
 
 > **Execution Note**: Directly invoke `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use the explicit absolute path `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
 
@@ -35,12 +37,14 @@ At each engineering milestone, the Orchestrator MUST consult external peer agent
    - When writing complex JSON schemas, prompt templates, or API contracts, run `claude-refine` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`) to optimize clarity and remove ambiguity.
 3. **Pre-flight Code Review Phase (Before Task Completion)**:
    - Before claiming any feature or major bugfix is complete, run `claude-review HEAD` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh HEAD`) to check for regressions, memory leaks, missing edge cases, and test gaps.
+4. **Performance / Algorithmic / Automation Phase**:
+   - Before finalizing a hot-path implementation, or when a task is heavy shell/CI/terminal automation, run `codex-optimize` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`) to get Codex's optimization pass instead of Claude's.
 
 ---
 
-## 3. Extensibility: Adding New Peer Agents (e.g., Codex, Custom CLI)
+## 3. Extensibility: Adding New Peer Agents (e.g., Custom/Local CLIs)
 
-To extend this workflow with additional external models (such as OpenAI Codex or local LLMs):
+To extend this workflow with additional external models beyond Claude CLI and Codex (e.g. local LLMs, other vendor CLIs):
 
 1. Place the non-interactive wrapper script under `.agent/skills/<agent-name>/scripts/` or `~/.local/bin/` (e.g., `codex_review.sh`).
 2. Follow the standard I/O convention:

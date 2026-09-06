@@ -8,4 +8,7 @@ This project integrates automated multi-model helpers located at `~/.local/bin` 
 - `claude-design "<requirement>" [files...]` - Deep architectural design pass
 - `claude-refine "<file>" "<goal>"` - Spec & prompt optimization
 - `claude-review [BASE_REF] "<task>"` - Pre-flight git diff code review
+- `codex-optimize "<task>" [files...]` - Algorithmic/performance analysis & terminal/CI automation (Codex)
 ```
+
+Codex also has a genuine **Computer Use** strength — driving a real GUI (browser, Figma, Xcode, Slack) by seeing the screen and controlling the mouse/keyboard — but only through the Codex desktop/ChatGPT app, not this headless CLI. Route tasks that truly need visual/GUI verification there instead of expecting `codex-optimize` to do it.

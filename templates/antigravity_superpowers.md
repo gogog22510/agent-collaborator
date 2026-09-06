@@ -59,7 +59,8 @@ Then append the following collaboration protocol to `.agent/AGENTS.md` at your p
   - `claude-design` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`): Architectural design & state-machine exploration
   - `claude-refine` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`): Spec & prompt optimization
   - `claude-review` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`): Pre-flight git diff code review
-  - *(Extensible: Add Codex or custom peer agent scripts under `.agent/skills/` or `~/.local/bin/`)*
+  - `codex-optimize` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`): Algorithmic/performance analysis & terminal/CI automation, using Codex's actual strengths (Terminal-Bench-leading agentic shell tasks, cheaper per-task on high-volume work). Codex's **Computer Use** (GUI screen/mouse/keyboard control) only exists in the Codex desktop app, not this headless script — route GUI-verification needs there.
+  - *(Extensible: Add other custom peer agent scripts under `.agent/skills/` or `~/.local/bin/`)*
 
 > **Execution Note**: Directly invoke `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use the explicit absolute path `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT run `which` or search for scripts.
 
@@ -85,13 +86,16 @@ flowchart TD
     end
 
     subgraph PeerAdvisors["🏛️ Peer Advisory Council (Claude / Codex / Extensible)"]
-        CD["claude-design / codex-design<br/>(Architecture Validation & Boundary Check)"]
+        CD["claude-design<br/>(Architecture Validation & Boundary Check)"]
         CR["claude-refine<br/>(Spec & Prompt Refinement)"]
-        CW["claude-review / codex-review<br/>(Strict Git Diff Code Review)"]
+        CW["claude-review<br/>(Strict Git Diff Code Review)"]
+        CO["codex-optimize<br/>(Perf/Algorithmic & Terminal Automation)"]
     end
 
     B -.-> CD
     P -.-> CR
     T -.-> CW
+    T -.-> CO
     CW --> V
+    CO --> V
 ```

@@ -9,15 +9,19 @@ This skill enables a universal, language-agnostic **Multi-Agent / Dual-Agent Wor
 
 ## Roles & Division of Labor
 
-- **External Peer Agents (Claude CLI / OpenAI Codex - Primary Architects & Reviewers)**:
+- **Claude CLI (Primary Architect & Reviewer)**:
   - Deep architecture & state-machine design (`claude_design.sh`)
   - Rigorous code review, vulnerability detection & regression prevention (`claude_review.sh`)
   - Spec / Prompt / Documentation refinement (`claude_refine.sh`)
+- **OpenAI Codex (Performance & Automation Specialist)** — dispatch here when the task plays to Codex's actual strengths:
+  - Algorithmic complexity / performance-hotspot analysis and heavy shell/CLI/CI automation (`codex_optimize.sh`). Codex leads Terminal-Bench-style agentic shell tasks and typically uses far fewer tokens per task, making it the cheaper choice for high-volume, terminal-heavy consultations.
+  - Second opinion / cross-model verification on architecture or review conclusions from Claude, when trade-offs are contentious.
+  - **Computer Use (GUI-driven tasks)**: recent Codex (via the ChatGPT desktop/Codex app, not the headless CLI) can see the screen and drive the mouse/keyboard to operate real apps (browser, Figma, Xcode, Slack, etc.). This is genuinely useful for visually verifying a UI change, testing an external app's behavior, or interacting with tools that have no CLI/API — but it is **not scriptable non-interactively** the way `codex exec` is. When a task needs this, tell the user/operator to drive it manually from the Codex desktop app rather than expecting an automated script to do it; do not fabricate a headless "computer use" script.
 - **Primary Agent (Antigravity / Gemini - The Orchestrator & Implementer)**:
   - Project discovery, codebase-wide search & context assembly
   - File generation & refactoring across any language stack
   - Toolchain execution (build tools, linters, test runners, git)
-  - **Self-Healing Fallback**: When an external agent hits rate limits, credit limits, or errors (exit code 100 or `FALLBACK_TRIGGERED`), Antigravity seamlessly assumes the Design / Review role and continues without halting the task.
+  - **Self-Healing Fallback**: When an external agent hits rate limits, credit limits, or errors (exit code 100 or `FALLBACK_TRIGGERED`), Antigravity seamlessly assumes the Design / Review / Optimization role and continues without halting the task.
 
 ## Universal Helper Scripts
 
@@ -43,10 +47,16 @@ claude-refine "<FILE_PATH>" "<OPTIMIZATION_GOAL>"
 # or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh "<FILE_PATH>" "<OPTIMIZATION_GOAL>"
 ```
 
+### 4. Algorithmic / Performance / Terminal Automation (Codex)
+```bash
+codex-optimize "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+```
+
 ## Graceful Fallback Protocol
 
 When calling any of the peer agent scripts:
 1. If the script outputs `⚠️ [FALLBACK_TRIGGERED: ...]` or exits with `100`:
    - Log a non-blocking notice: *"External peer agent unavailable. Seamlessly switching to internal reasoning for this phase."*
-   - Antigravity immediately executes the Design, Review, or Prompt Refinement task itself using its own model reasoning.
+   - Antigravity immediately executes the Design, Review, Prompt Refinement, or Optimization task itself using its own model reasoning.
    - The workflow never blocks or fails due to external API limits.

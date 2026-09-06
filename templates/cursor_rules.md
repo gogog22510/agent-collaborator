@@ -12,4 +12,6 @@ You have access to local Claude CLI helper scripts for peer review and architect
   Run: `claude-refine "<file_path>" "<optimization_goal>"`
 - Before submitting major pull requests or marking complex tasks done:
   Run: `claude-review HEAD "<task_description>"`
+- When the task is algorithmic/performance-hotspot analysis, or heavy shell/CI/terminal automation:
+  Run: `codex-optimize "<task_or_requirement>" [relevant_files...]`
 ```
