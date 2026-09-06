@@ -11,6 +11,16 @@
   - **Global Context Assembly**: Analyzes whole-project topology and pinpoints relevant files/slices.
   - **Toolchain & Execution**: Runs build commands, automated tests, git operations, and code modifications.
   - **Workflow Supervision & Fallback**: Coordinates milestones and seamlessly takes over when external peers are unavailable.
+  - **Engineering Discipline (Adaptive Dual-Mode)**:
+    - *When Superpowers is installed* (e.g. `brainstorming`, `systematic-debugging`, `test-driven-development`, `verification-before-completion` are available):
+      - **New Features / Design**: MUST invoke `brainstorming` skill before writing implementation plans or touching code.
+      - **Bugfix / Failure**: MUST invoke `systematic-debugging` skill to find root cause before modifying code.
+      - **Code Implementation**: MUST strictly follow `test-driven-development` (write failing test first).
+      - **Verification**: MUST invoke `verification-before-completion` before claiming completion.
+    - *When Superpowers is NOT installed (Standalone Mode)*:
+      - The Orchestrator proceeds with disciplined internal reasoning and standard planning, without requiring external skill calls or throwing errors.
+    - *Informational Q&A Exemption (Both Modes)*:
+      - Pure conceptual queries, codebase explanations, architecture walkthroughs, and syntax questions that do NOT modify code or fix bugs are EXEMPT from heavy engineering workflows and must be answered directly.
 
 - **Peer Advisory Council (External Specialized Agents)**:
   - **Claude CLI (`agent-collaborator`)**:
@@ -21,7 +31,7 @@
     - *Algorithmic, Performance & Terminal/CI Automation*: `codex-optimize "<task_or_requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`)
     - *Cross-Model Second Opinion*: Consult Codex when architecture or review trade-offs from Claude require a contrasting perspective.
     - *Computer Use (GUI verification)*: Codex's screen-driven mouse/keyboard control is only available via the **Codex desktop/ChatGPT app**, not this headless CLI script. If a task needs actual GUI interaction (verifying a UI in a browser/Figma/Xcode/Slack), say so explicitly and route it to a human or the Codex app — do not assume `codex-optimize` can do it.
-  - **Other Specialized Peer Agents (Extensible)**: see Section 3 below.
+  - **Other Specialized Peer Agents (Extensible)**: see Section 4 below.
 
 > **Execution Note for Antigravity (Gemini)**:
 > 1. **Sandbox Bypass**: External peer agent tools (`claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require internet access to Claude API. You **MUST** execute them using `run_command` with `BypassSandbox: true`. Do NOT execute in standard sandbox mode.

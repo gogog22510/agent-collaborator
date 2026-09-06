@@ -78,23 +78,42 @@ Computer Use is genuinely one of Codex's strengths, but it is an interactive, sc
 
 ---
 
-## 🚀 1. Install Superpowers (Prerequisite Methodology)
+## 🔄 Dual Operating Modes: Standalone vs. Superpowers Integrated
 
-If you want your agent to follow structured engineering discipline (Brainstorming, Spec First, Implementation Plans, Red/Green TDD), `install.sh` can attempt this for you non-interactively:
+Agent Collaborator is designed with **adaptive dual-mode compatibility**:
+
+1. **Standalone Mode (Default / Bare Agent Collaborator)**:
+   - Run without installing Superpowers (`./install.sh --all` or `./install.sh --project <path>`).
+   - Focuses purely on multi-model advisory and pre-flight verification (`claude-design`, `claude-review`, `claude-refine`, `codex-optimize`).
+   - The Central Orchestrator uses its internal reasoning and standard planning. It **never fails, errors, or requires missing skills** if Superpowers is absent.
+2. **Superpowers Integrated Mode (Dual-Engine Powerhouse)**:
+   - Combines Superpowers' structured engineering lifecycle (Brainstorming, Spec-First, Red/Green TDD, Systematic Debugging, Verification) with Agent Collaborator's peer advisory council.
+   - Run with `./install.sh --with-superpowers` (or install the plugin manually).
+   - **How it is technically guaranteed**:
+     - **Claude Code**: The `superpowers` `SessionStart` hook injects mandatory skill invocation rules on startup.
+     - **Antigravity (Gemini)**: The protocol in `AGENTS.md` and `GEMINI.md` acts as an **Always-Active Rule**, unconditionally enforcing engineering discipline on every engineering turn.
+3. **Trigger Boundary (Engineering Tasks vs. Informational Q&A)**:
+   - **Active Engineering Tasks** (writing code, designing components, fixing bugs, refactoring) strictly enforce Superpowers and Peer Review.
+   - **Informational Q&A** (e.g. *"What does line 42 do?"*, *"Explain this architecture"*, *"How to write this Dart syntax?"*) are **explicitly exempt** from workflow ceremonies and answered directly without friction.
+
+---
+
+## 🚀 1. Install Superpowers (Optional Dual-Engine Methodology)
+
+If you want your agent to follow structured engineering discipline (Brainstorming, Spec First, Implementation Plans, Red/Green TDD), `install.sh` can install it for you:
 
 ```bash
 ./install.sh --with-superpowers
 ```
 
-This detects whichever driver CLI is on `PATH` (`agy` for Antigravity, `claude` for Claude Code) and runs its non-interactive plugin-install command. It can be combined with any other flag, e.g. `./install.sh --project . --with-superpowers`. Note that Claude Code's `/plugin install` is documented as an interactive-session command — if the non-interactive attempt fails, the script prints the manual fallback below instead of silently giving up.
+This detects whichever driver CLI is on `PATH` (`agy` for Antigravity, `claude` for Claude Code) and runs its non-interactive plugin-install command. It can be combined with any other flag, e.g. `./install.sh --project . --with-superpowers`.
 
-If it can't install automatically (CLI missing, or plugin install requires an interactive session), do it manually depending on your driver:
-
+If installing manually:
 * **Antigravity**:
   ```bash
   agy plugin install https://github.com/obra/superpowers
   ```
-* **Claude Code** (run inside a Claude Code session):
+* **Claude Code** (inside a Claude Code session):
   ```text
   /plugin install superpowers@claude-plugins-official
   ```
@@ -132,11 +151,11 @@ Select an installation target:
 ### Non-Interactive Flags (CI / Automated Scripts)
 * **Full Install**: `./install.sh --all`
 * **CLI Only**: `./install.sh --cli` (Symlinks to `~/.local/bin/`)
-* **Antigravity Global**: `./install.sh --antigravity-global` (Installs into `~/.gemini/skills/`)
-* **Project Local**: `./install.sh --project /path/to/project` (Installs into `.agent/skills/` and `.claude/skills/`, and injects the Multi-Agent Peer Collaboration Protocol into `/path/to/project/AGENTS.md` — pass `--no-agents-md` to skip that step)
-* **Superpowers**: `./install.sh --with-superpowers` (standalone, or combined with any flag above)
+* **Antigravity Global**: `./install.sh --antigravity-global` (Installs into `~/.gemini/skills/` and updates `~/.gemini/config/AGENTS.md`)
+* **Project Local**: `./install.sh --project /path/to/project` (Installs into `.agent/skills/` and `.claude/skills/`, and injects/updates the protocol in `/path/to/project/AGENTS.md` — pass `--no-agents-md` to skip protocol injection)
+* **With Superpowers**: `./install.sh --with-superpowers` (standalone, or combined with any flag above)
 
-> **Why inject into `AGENTS.md`?** Antigravity + Superpowers (and Codex CLI, and most agent CLIs) are driven by the project's `AGENTS.md`, not by `templates/AGENTS.md` in this repo — that file is just the source template. `--project` now writes the actual protocol block into your project's real `AGENTS.md` for you (idempotently: re-running the installer detects the existing block and skips it, and it only appends, never overwrites the rest of your file).
+> **In-Place Updates**: `--project` safely injects or updates the protocol block between `<!-- agent-collaborator:protocol:start -->` and `<!-- agent-collaborator:protocol:end -->` in-place, preserving any custom rules you already have in `AGENTS.md`. It also cleans up any legacy duplicate Superpowers skills in `.agent/skills/` to ensure your global plugin works cleanly without version drift.
 
 ---
 

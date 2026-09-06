@@ -74,18 +74,37 @@ Computer Use 確實是 Codex 的真實強項之一，但它是互動式、依賴
 
 ---
 
-## 🚀 一、 安裝 Superpowers (先備方法論框架)
+## 🔄 雙模態運作支援：獨立模式 vs Superpowers 整合模式
 
-若您希望讓 Agent 具備完整的工程方法論（規格設計、TDD、實作計畫），`install.sh` 可以幫您非互動地嘗試安裝：
+Agent Collaborator 具備**自適應雙模態相容設計**：
+
+1. **獨立模式（預設 / Standalone Mode）**：
+   - 無需安裝 Superpowers 即可獨立運作（執行 `./install.sh --all` 或 `./install.sh --project <path>`）。
+   - 專注於多模型專家智囊審查與交付前驗證（`claude-design`, `claude-review`, `claude-refine`, `codex-optimize`）。
+   - 總指揮採用原生內建推理進行標準計畫與除錯。**若環境沒有安裝 Superpowers，系統絕不會報錯或中斷任務**。
+2. **Superpowers 整合模式（雙引擎架構 / Dual-Engine）**：
+   - 將 Superpowers 的嚴格工程生命週期（頭腦風暴、規格先行、TDD 先紅後綠、系統性除錯、交付前驗證）與 Agent Collaborator 外部 Peer 智囊團完美結合。
+   - 執行 `./install.sh --with-superpowers`（或手動安裝外掛）即可啟用。
+   - **技術保證機制**：
+     - **Claude Code**：透過 `superpowers` 外掛的 `SessionStart` Hook，在會話啟動時硬性注入技能調用約束。
+     - **Antigravity (Gemini)**：透過 `AGENTS.md` / `GEMINI.md` 的 **常駐系統規則（Always-Active Rules）**，每一輪工程決策皆強制遵守。
+3. **任務邊界定義（工程任務 vs 純資訊問答）**：
+   - **實質工程任務**（撰寫/修改程式碼、設計功能、修復 Bug、重構）：嚴格強制執行 Superpowers 與 Peer Review。
+   - **純資訊與概念問答**（例如：*「這行 code 是什麼意思？」*、*「介紹一下專案架構」*、*「Dart 語法怎麼寫？」*）：**明確予以豁免**，直接精準回覆，不觸發繁瑣流程。
+
+---
+
+## 🚀 一、 安裝 Superpowers (可選雙引擎方法論框架)
+
+若您希望讓 Agent 具備完整的工程方法論（規格設計、TDD、實作計畫），`install.sh` 可以幫您自動安裝：
 
 ```bash
 ./install.sh --with-superpowers
 ```
 
-此指令會偵測 `PATH` 上有哪個驅動 CLI（Antigravity 用 `agy`，Claude Code 用 `claude`），並執行其非互動安裝指令；可與其他任何選項組合，例如 `./install.sh --project . --with-superpowers`。由於 Claude Code 的 `/plugin install` 官方文件說明僅支援互動式 session，若非互動嘗試失敗，腳本會印出下方的手動安裝方式，而非靜默失敗。
+此指令會偵測 `PATH` 上有哪個驅動 CLI（Antigravity 用 `agy`，Claude Code 用 `claude`），並執行其外掛安裝指令；可與其他任何選項組合，例如 `./install.sh --project . --with-superpowers`。
 
-若無法自動安裝（CLI 不存在，或該版本的 plugin install 僅限互動式 session），請依驅動手動執行：
-
+若手動安裝：
 * **Antigravity**：
   ```bash
   agy plugin install https://github.com/obra/superpowers
@@ -129,11 +148,11 @@ Select an installation target:
 ### 非互動旗標（CI / 自動化腳本）
 * **全裝**：`./install.sh --all`
 * **僅 CLI**：`./install.sh --cli`（symlink 到 `~/.local/bin/`）
-* **Antigravity Global**：`./install.sh --antigravity-global`
-* **Project Local**：`./install.sh --project /path/to/project`（安裝到 `.agent/skills/` 與 `.claude/skills/`，並將多代理人協同協議注入 `/path/to/project/AGENTS.md`；加 `--no-agents-md` 可跳過此步驟）
+* **Antigravity Global**：`./install.sh --antigravity-global`（安裝至 `~/.gemini/skills/` 並同步 `~/.gemini/config/AGENTS.md`）
+* **Project Local**：`./install.sh --project /path/to/project`（安裝至 `.agent/skills/` 與 `.claude/skills/`，並就地注入/更新 `/path/to/project/AGENTS.md`；加 `--no-agents-md` 可跳過協議注入步驟）
 * **Superpowers**：`./install.sh --with-superpowers`（可獨立使用，也可與上述任一選項組合）
 
-> **為什麼要注入 `AGENTS.md`？** Antigravity + Superpowers（以及 Codex CLI 等大多數 agent CLI）實際上是讀取專案的 `AGENTS.md` 來驅動行為，而不是本專案 `templates/AGENTS.md`——那份檔案只是來源範本。現在 `--project` 會自動把協議內容寫進您專案真正的 `AGENTS.md`（具冪等性：重複執行會偵測已存在的區塊並跳過，且只會附加內容，絕不覆蓋您檔案裡原有的其他內容）。
+> **就地更新 (In-Place Updates)**：`--project` 會在 `<!-- agent-collaborator:protocol:start -->` 與 `<!-- agent-collaborator:protocol:end -->` 標記間進行**就地安全替換更新**，完整保留您在 `AGENTS.md` 內原有的任何自訂規則。同時會自動檢查並清理 `.agent/skills/` 內舊版重複的 Superpowers 檔案，確保全域外掛正常運作不產生版本漂移。
 
 ---
 

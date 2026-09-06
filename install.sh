@@ -114,6 +114,35 @@ install_project_local() {
   # Clean up legacy project-local claude-collaborator dir if present
   rm -rf "$TARGET_DIR/.agent/skills/claude-collaborator" 2>/dev/null || true
 
+  # Check for project-local Superpowers duplicates that might shadow global plugins
+  local STALE_SKILLS=("using-superpowers" "brainstorming" "systematic-debugging" "test-driven-development" "executing-plans" "writing-plans" "verification-before-completion" "finishing-a-development-branch" "receiving-code-review" "requesting-code-review")
+  local found_stale=false
+  for s in "${STALE_SKILLS[@]}"; do
+    if [ -d "$TARGET_DIR/.agent/skills/$s" ]; then
+      found_stale=true
+      break
+    fi
+  done
+  if [ "$found_stale" = true ]; then
+    echo -e "${YELLOW}  ⚠ Notice: Detected project-local skills in $TARGET_DIR/.agent/skills/${NC}"
+    echo "    (Project-local skills take precedence and may shadow newer global Superpowers plugin updates)."
+    if [ -t 0 ]; then
+      read -rp "    Back up and remove local duplicate skills to use global plugin? [y/N] " clean_ans
+      if [[ "$clean_ans" =~ ^[Yy]$ ]]; then
+        local BACKUP_DIR="$TARGET_DIR/.agent/skills.backup-$(date +%Y%m%d%H%M%S)_$$"
+        mkdir -p "$BACKUP_DIR"
+        for s in "${STALE_SKILLS[@]}"; do
+          if [ -d "$TARGET_DIR/.agent/skills/$s" ]; then
+            mv "$TARGET_DIR/.agent/skills/$s" "$BACKUP_DIR/"
+          fi
+        done
+        echo -e "${GREEN}    ✓ Moved local duplicate skills to backup: $BACKUP_DIR${NC}"
+      fi
+    else
+      echo "    To use global plugin updates, remove or rename local duplicate skills when ready."
+    fi
+  fi
+
   # Support .agent/skills (Antigravity / Superpowers) and .claude/skills
   AGENT_TARGET="$TARGET_DIR/.agent/skills/agent-collaborator"
   CLAUDE_TARGET="$TARGET_DIR/.claude/skills/agent-collaborator"
@@ -128,36 +157,104 @@ install_project_local() {
   echo -e "${GREEN}✓ Local skills installed into $AGENT_TARGET and $CLAUDE_TARGET${NC}"
 }
 
-# Extracts the injectable multi-agent protocol body from templates/AGENTS.md
-# (the content between the first ```markdown fence and its closing ```).
-extract_agents_contract() {
-  awk '/^```markdown$/{flag=1;next}/^```$/{if(flag){exit}}flag' "$TEMPLATE_DIR/AGENTS.md"
-}
-
 AGENTS_MD_MARKER_START="<!-- agent-collaborator:protocol:start -->"
 AGENTS_MD_MARKER_END="<!-- agent-collaborator:protocol:end -->"
 
-# Injects (idempotently) the Multi-Agent Peer Collaboration Protocol from
-# templates/AGENTS.md into the target project's AGENTS.md, since this is the
-# file Antigravity/Superpowers (and Codex CLI, and most agent CLIs) actually
-# read to drive behavior — not the templates/ directory itself.
+# Injects or updates (idempotently and safely) the Multi-Agent Peer Collaboration Protocol
+# into a single target file using in-place marker-bounded replacement.
+inject_into_single_file() {
+  local TARGET_FILE="$1"
+  local TEMPLATE_FILE="$2"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo -e "${YELLOW}  ⚠ python3 not found on PATH. Cannot perform marker-scoped update for $TARGET_FILE.${NC}"
+    return 1
+  fi
+
+  local py_out
+  local py_err
+  local py_status=0
+  local tmp_err
+  tmp_err="$(mktemp 2>/dev/null || echo "/tmp/inject_err_$$.txt")"
+
+  py_out=$(python3 - "$TARGET_FILE" "$TEMPLATE_FILE" "$AGENTS_MD_MARKER_START" "$AGENTS_MD_MARKER_END" 2>"$tmp_err" <<'EOF'
+import sys, os, re
+
+agents_file = sys.argv[1]
+template_file = sys.argv[2]
+marker_start = sys.argv[3]
+marker_end = sys.argv[4]
+
+with open(template_file, "r", encoding="utf-8") as f:
+    text = f.read()
+
+match = re.search(r"```markdown\n(.*?)\n```", text, re.DOTALL)
+contract = match.group(1).strip() + "\n" if match else text
+block = f"{marker_start}\n{contract}{marker_end}\n"
+
+if not os.path.exists(agents_file):
+    parent_dir = os.path.dirname(os.path.abspath(agents_file))
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
+    with open(agents_file, "w", encoding="utf-8") as f:
+        f.write(block)
+    print("INJECTED")
+    sys.exit(0)
+
+with open(agents_file, "r", encoding="utf-8") as f:
+    existing = f.read()
+
+pattern = re.escape(marker_start) + r".*?" + re.escape(marker_end) + r"\n?"
+if re.search(pattern, existing, re.DOTALL):
+    updated = re.sub(pattern, lambda m: block, existing, flags=re.DOTALL)
+    with open(agents_file, "w", encoding="utf-8") as f:
+        f.write(updated)
+    print("UPDATED")
+else:
+    prefix = "\n" if existing.strip() else ""
+    with open(agents_file, "w", encoding="utf-8") as f:
+        f.write(existing + prefix + block)
+    print("INJECTED")
+EOF
+) || py_status=$?
+
+  py_err="$(cat "$tmp_err" 2>/dev/null || true)"
+  rm -f "$tmp_err"
+
+  if [ $py_status -ne 0 ]; then
+    echo -e "${YELLOW}  ⚠ Python injection failed ($py_status): $py_err${NC}"
+    return 1
+  fi
+
+  if [ "$py_out" = "UPDATED" ]; then
+    echo -e "${GREEN}✓ Updated Multi-Agent Peer Collaboration Protocol in $TARGET_FILE (in-place)${NC}"
+  elif [ "$py_out" = "INJECTED" ]; then
+    echo -e "${GREEN}✓ Injected Multi-Agent Peer Collaboration Protocol into $TARGET_FILE${NC}"
+  fi
+  return 0
+}
+
+# Injects or updates (idempotently) the Multi-Agent Peer Collaboration Protocol from
+# templates/AGENTS.md into the target project's AGENTS.md and .agent/AGENTS.md (if present).
 inject_agents_md() {
   local TARGET_DIR="${1:-$(pwd)}"
   local AGENTS_FILE="$TARGET_DIR/AGENTS.md"
+  local TEMPLATE_FILE="$TEMPLATE_DIR/AGENTS.md"
 
-  if [ -f "$AGENTS_FILE" ] && grep -qF "$AGENTS_MD_MARKER_START" "$AGENTS_FILE" 2>/dev/null; then
-    echo -e "${YELLOW}  ⚠ $AGENTS_FILE already contains the agent-collaborator protocol block, skipping.${NC}"
+  if [ ! -f "$TEMPLATE_FILE" ]; then
+    echo -e "${YELLOW}  ⚠ Template file $TEMPLATE_FILE not found, skipping injection.${NC}"
     return
   fi
 
-  {
-    [ -s "$AGENTS_FILE" ] && echo ""
-    echo "$AGENTS_MD_MARKER_START"
-    extract_agents_contract
-    echo "$AGENTS_MD_MARKER_END"
-  } >> "$AGENTS_FILE"
+  inject_into_single_file "$AGENTS_FILE" "$TEMPLATE_FILE"
 
-  echo -e "${GREEN}✓ Injected Multi-Agent Peer Collaboration Protocol into $AGENTS_FILE${NC}"
+  # If .agent directory exists, also update .agent/AGENTS.md via marker-scoped replacement (never blind cp)
+  if [ -d "$TARGET_DIR/.agent" ]; then
+    local DOT_AGENT_FILE="$TARGET_DIR/.agent/AGENTS.md"
+    if [ "$DOT_AGENT_FILE" != "$AGENTS_FILE" ] && [ -f "$DOT_AGENT_FILE" ]; then
+      inject_into_single_file "$DOT_AGENT_FILE" "$TEMPLATE_FILE"
+    fi
+  fi
 }
 
 # Attempts to install the Superpowers methodology plugin (obra/superpowers)
