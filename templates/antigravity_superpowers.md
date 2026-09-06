@@ -48,7 +48,7 @@ cd /path/to/your/project
 /path/to/agent-collaborator/install.sh --project .
 ```
 
-Then append the following collaboration protocol to `.agent/AGENTS.md` at your project root:
+Since Superpowers/Antigravity are driven by your project's `AGENTS.md`, `--project` now **automatically injects** the collaboration protocol (from `templates/AGENTS.md`) into `AGENTS.md` at your project root for you — idempotently, and without touching any of your existing content. Pass `--no-agents-md` if you'd rather do it by hand, or want to review the exact block first: it is reproduced below for reference.
 
 ```markdown
 # 🤝 Multi-Agent Peer Collaboration & Verification Protocol

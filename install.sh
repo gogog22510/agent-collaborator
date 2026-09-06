@@ -7,6 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_SRC="$SCRIPT_DIR/skills/agent-collaborator"
+TEMPLATE_DIR="$SCRIPT_DIR/templates"
 
 # Color helpers
 GREEN="\033[0;32m"
@@ -95,6 +96,78 @@ install_project_local() {
   echo -e "${GREEN}✓ Local skills installed into $AGENT_TARGET and $CLAUDE_TARGET${NC}"
 }
 
+# Extracts the injectable multi-agent protocol body from templates/AGENTS.md
+# (the content between the first ```markdown fence and its closing ```).
+extract_agents_contract() {
+  awk '/^```markdown$/{flag=1;next}/^```$/{if(flag){exit}}flag' "$TEMPLATE_DIR/AGENTS.md"
+}
+
+AGENTS_MD_MARKER_START="<!-- agent-collaborator:protocol:start -->"
+AGENTS_MD_MARKER_END="<!-- agent-collaborator:protocol:end -->"
+
+# Injects (idempotently) the Multi-Agent Peer Collaboration Protocol from
+# templates/AGENTS.md into the target project's AGENTS.md, since this is the
+# file Antigravity/Superpowers (and Codex CLI, and most agent CLIs) actually
+# read to drive behavior — not the templates/ directory itself.
+inject_agents_md() {
+  local TARGET_DIR="${1:-$(pwd)}"
+  local AGENTS_FILE="$TARGET_DIR/AGENTS.md"
+
+  if [ -f "$AGENTS_FILE" ] && grep -qF "$AGENTS_MD_MARKER_START" "$AGENTS_FILE" 2>/dev/null; then
+    echo -e "${YELLOW}  ⚠ $AGENTS_FILE already contains the agent-collaborator protocol block, skipping.${NC}"
+    return
+  fi
+
+  {
+    [ -s "$AGENTS_FILE" ] && echo ""
+    echo "$AGENTS_MD_MARKER_START"
+    extract_agents_contract
+    echo "$AGENTS_MD_MARKER_END"
+  } >> "$AGENTS_FILE"
+
+  echo -e "${GREEN}✓ Injected Multi-Agent Peer Collaboration Protocol into $AGENTS_FILE${NC}"
+}
+
+# Attempts to install the Superpowers methodology plugin (obra/superpowers)
+# non-interactively for whichever driver CLI is detected on PATH. Superpowers
+# itself is a separate project from agent-collaborator; this only automates
+# the install step documented in the README.
+install_superpowers() {
+  echo -e "\n${BLUE}▶ Installing Superpowers methodology plugin...${NC}"
+  local installed_any=false
+
+  if command -v agy >/dev/null 2>&1; then
+    echo "  Detected Antigravity CLI (agy). Installing Superpowers plugin..."
+    if agy plugin install https://github.com/obra/superpowers; then
+      echo -e "${GREEN}  ✓ Superpowers installed for Antigravity.${NC}"
+      installed_any=true
+    else
+      echo -e "${YELLOW}  ⚠ 'agy plugin install' failed. See manual fallback below.${NC}"
+    fi
+  fi
+
+  if command -v claude >/dev/null 2>&1; then
+    echo "  Detected Claude Code CLI. Installing Superpowers from the official marketplace..."
+    if claude plugin install superpowers@claude-plugins-official >/dev/null 2>&1; then
+      echo -e "${GREEN}  ✓ Superpowers installed for Claude Code.${NC}"
+      installed_any=true
+    else
+      echo -e "${YELLOW}  ⚠ Non-interactive 'claude plugin install' failed (this Claude Code version may only support it inside an interactive session).${NC}"
+      echo "    Run this manually inside a Claude Code session instead:"
+      echo "      /plugin install superpowers@claude-plugins-official"
+    fi
+  fi
+
+  if [ "$installed_any" = false ]; then
+    echo -e "${YELLOW}  ⚠ Neither 'agy' nor 'claude' CLI was found on PATH (or both failed).${NC}"
+    echo "  Install manually depending on your driver:"
+    echo "    Antigravity: agy plugin install https://github.com/obra/superpowers"
+    echo "                 (or clone into ~/.gemini/config/plugins/superpowers)"
+    echo "    Claude Code: /plugin install superpowers@claude-plugins-official"
+    echo "    Cursor:      /add-plugin superpowers"
+  fi
+}
+
 show_menu() {
   print_banner
   echo "Select an installation target:"
@@ -103,9 +176,10 @@ show_menu() {
   echo "  3) Antigravity Global Skills (~/.gemini/...)"
   echo "  4) Project-Local Skill (.agent/skills/ in current directory)"
   echo "  5) Claude Code Global Skills (~/.claude/skills/)"
+  echo "  6) Install Superpowers methodology plugin (Antigravity / Claude Code)"
   echo "  q) Quit"
   echo ""
-  read -rp "Enter choice [1-5]: " choice
+  read -rp "Enter choice [1-6]: " choice
   case "$choice" in
     1)
       install_cli
@@ -120,9 +194,16 @@ show_menu() {
       ;;
     4)
       install_project_local "$(pwd)"
+      read -rp "Inject the Multi-Agent Peer Collaboration Protocol into $(pwd)/AGENTS.md? [Y/n] " ans
+      if [[ ! "$ans" =~ ^[Nn]$ ]]; then
+        inject_agents_md "$(pwd)"
+      fi
       ;;
     5)
       install_claude_code_global
+      ;;
+    6)
+      install_superpowers
       ;;
     *)
       echo "Installation cancelled."
@@ -131,9 +212,26 @@ show_menu() {
   esac
 }
 
+# Pre-scan for flags that can combine with any action below, so e.g.
+# `./install.sh --project . --with-superpowers` works in one shot.
+WITH_SUPERPOWERS=false
+INJECT_AGENTS_MD=true
+ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --with-superpowers) WITH_SUPERPOWERS=true ;;
+    --no-agents-md) INJECT_AGENTS_MD=false ;;
+    *) ARGS+=("$arg") ;;
+  esac
+done
+set -- "${ARGS[@]+"${ARGS[@]}"}"
+
 # CLI Argument parsing
 if [ $# -eq 0 ]; then
-  if [ -t 0 ]; then
+  if [ "$WITH_SUPERPOWERS" = true ]; then
+    print_banner
+    install_superpowers
+  elif [ -t 0 ]; then
     show_menu
   else
     print_banner
@@ -161,15 +259,23 @@ else
     --project|--local)
       TARGET_PATH="${2:-$(pwd)}"
       install_project_local "$TARGET_PATH"
+      if [ "$INJECT_AGENTS_MD" = true ]; then
+        inject_agents_md "$TARGET_PATH"
+      fi
       ;;
     --help|-h)
-      echo "Usage: ./install.sh [OPTION]"
+      echo "Usage: ./install.sh [OPTION] [--with-superpowers] [--no-agents-md]"
       echo "Options:"
       echo "  --all                 Install CLI tools, Antigravity global, and Claude Code skills"
       echo "  --cli                 Install standalone CLI tools to ~/.local/bin"
       echo "  --antigravity-global  Install to ~/.gemini/skills and ~/.gemini/config/skills"
       echo "  --claude-code         Install to ~/.claude/skills"
       echo "  --project [PATH]      Install locally to [PATH]/.agent/skills and .claude/skills"
+      echo "                        (also injects the collaboration protocol into [PATH]/AGENTS.md)"
+      echo "  --with-superpowers    Also install the Superpowers methodology plugin (obra/superpowers)"
+      echo "                        for whichever of agy/claude is found on PATH. Can combine with"
+      echo "                        any option above, or be used standalone."
+      echo "  --no-agents-md        With --project, skip injecting the protocol into AGENTS.md"
       echo "  --help                Show this help message"
       exit 0
       ;;
@@ -179,6 +285,10 @@ else
       exit 1
       ;;
   esac
+
+  if [ "$WITH_SUPERPOWERS" = true ]; then
+    install_superpowers
+  fi
 fi
 
 echo -e "\n${GREEN}🎉 Installation completed successfully!${NC}\n"

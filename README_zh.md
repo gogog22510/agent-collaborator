@@ -76,13 +76,21 @@ Computer Use 確實是 Codex 的真實強項之一，但它是互動式、依賴
 
 ## 🚀 一、 安裝 Superpowers (先備方法論框架)
 
-若您希望讓 Agent 具備完整的工程方法論（規格設計、TDD、實作計畫）：
+若您希望讓 Agent 具備完整的工程方法論（規格設計、TDD、實作計畫），`install.sh` 可以幫您非互動地嘗試安裝：
+
+```bash
+./install.sh --with-superpowers
+```
+
+此指令會偵測 `PATH` 上有哪個驅動 CLI（Antigravity 用 `agy`，Claude Code 用 `claude`），並執行其非互動安裝指令；可與其他任何選項組合，例如 `./install.sh --project . --with-superpowers`。由於 Claude Code 的 `/plugin install` 官方文件說明僅支援互動式 session，若非互動嘗試失敗，腳本會印出下方的手動安裝方式，而非靜默失敗。
+
+若無法自動安裝（CLI 不存在，或該版本的 plugin install 僅限互動式 session），請依驅動手動執行：
 
 * **Antigravity**：
   ```bash
   agy plugin install https://github.com/obra/superpowers
   ```
-* **Claude Code**：
+* **Claude Code**（需在 Claude Code session 內執行）：
   ```text
   /plugin install superpowers@claude-plugins-official
   ```
@@ -115,7 +123,17 @@ Select an installation target:
   3) Antigravity Global Skills (~/.gemini/...)
   4) Project-Local Skill (.agent/skills/ in current directory)
   5) Claude Code Global Skills (~/.claude/skills/)
+  6) Install Superpowers methodology plugin (Antigravity / Claude Code)
 ```
+
+### 非互動旗標（CI / 自動化腳本）
+* **全裝**：`./install.sh --all`
+* **僅 CLI**：`./install.sh --cli`（symlink 到 `~/.local/bin/`）
+* **Antigravity Global**：`./install.sh --antigravity-global`
+* **Project Local**：`./install.sh --project /path/to/project`（安裝到 `.agent/skills/` 與 `.claude/skills/`，並將多代理人協同協議注入 `/path/to/project/AGENTS.md`；加 `--no-agents-md` 可跳過此步驟）
+* **Superpowers**：`./install.sh --with-superpowers`（可獨立使用，也可與上述任一選項組合）
+
+> **為什麼要注入 `AGENTS.md`？** Antigravity + Superpowers（以及 Codex CLI 等大多數 agent CLI）實際上是讀取專案的 `AGENTS.md` 來驅動行為，而不是本專案 `templates/AGENTS.md`——那份檔案只是來源範本。現在 `--project` 會自動把協議內容寫進您專案真正的 `AGENTS.md`（具冪等性：重複執行會偵測已存在的區塊並跳過，且只會附加內容，絕不覆蓋您檔案裡原有的其他內容）。
 
 ---
 

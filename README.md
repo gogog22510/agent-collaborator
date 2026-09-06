@@ -80,13 +80,21 @@ Computer Use is genuinely one of Codex's strengths, but it is an interactive, sc
 
 ## 🚀 1. Install Superpowers (Prerequisite Methodology)
 
-If you want your agent to follow structured engineering discipline (Brainstorming, Spec First, Implementation Plans, Red/Green TDD):
+If you want your agent to follow structured engineering discipline (Brainstorming, Spec First, Implementation Plans, Red/Green TDD), `install.sh` can attempt this for you non-interactively:
+
+```bash
+./install.sh --with-superpowers
+```
+
+This detects whichever driver CLI is on `PATH` (`agy` for Antigravity, `claude` for Claude Code) and runs its non-interactive plugin-install command. It can be combined with any other flag, e.g. `./install.sh --project . --with-superpowers`. Note that Claude Code's `/plugin install` is documented as an interactive-session command — if the non-interactive attempt fails, the script prints the manual fallback below instead of silently giving up.
+
+If it can't install automatically (CLI missing, or plugin install requires an interactive session), do it manually depending on your driver:
 
 * **Antigravity**:
   ```bash
   agy plugin install https://github.com/obra/superpowers
   ```
-* **Claude Code**:
+* **Claude Code** (run inside a Claude Code session):
   ```text
   /plugin install superpowers@claude-plugins-official
   ```
@@ -118,13 +126,17 @@ Select an installation target:
   3) Antigravity Global Skills (~/.gemini/...)
   4) Project-Local Skill (.agent/skills/ in current directory)
   5) Claude Code Global Skills (~/.claude/skills/)
+  6) Install Superpowers methodology plugin (Antigravity / Claude Code)
 ```
 
 ### Non-Interactive Flags (CI / Automated Scripts)
 * **Full Install**: `./install.sh --all`
 * **CLI Only**: `./install.sh --cli` (Symlinks to `~/.local/bin/`)
 * **Antigravity Global**: `./install.sh --antigravity-global` (Installs into `~/.gemini/skills/`)
-* **Project Local**: `./install.sh --project /path/to/project` (Installs into `.agent/skills/`)
+* **Project Local**: `./install.sh --project /path/to/project` (Installs into `.agent/skills/` and `.claude/skills/`, and injects the Multi-Agent Peer Collaboration Protocol into `/path/to/project/AGENTS.md` — pass `--no-agents-md` to skip that step)
+* **Superpowers**: `./install.sh --with-superpowers` (standalone, or combined with any flag above)
+
+> **Why inject into `AGENTS.md`?** Antigravity + Superpowers (and Codex CLI, and most agent CLIs) are driven by the project's `AGENTS.md`, not by `templates/AGENTS.md` in this repo — that file is just the source template. `--project` now writes the actual protocol block into your project's real `AGENTS.md` for you (idempotently: re-running the installer detects the existing block and skips it, and it only appends, never overwrites the rest of your file).
 
 ---
 

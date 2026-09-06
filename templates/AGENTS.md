@@ -1,6 +1,6 @@
 # Multi-Agent Peer Collaboration Contract (`AGENTS.md`)
 
-Add the following configuration into your project's `.agent/AGENTS.md`, `AGENTS.md`, or system instructions to enforce disciplined multi-agent cross-verification:
+`./install.sh --project <path>` automatically injects the ```markdown ... ``` block below into `<path>/AGENTS.md` for you (idempotently — pass `--no-agents-md` to skip it). This file is the source `install.sh` extracts from; the manual steps below are for reference or for injecting into a different location (`.agent/AGENTS.md`, system instructions, etc.) by hand:
 
 ```markdown
 # 🤝 Multi-Agent Peer Collaboration & Verification Protocol
