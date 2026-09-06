@@ -29,13 +29,14 @@ flowchart TD
     subgraph PeerCouncil["🏛️ External Peer Advisory Council"]
         direction TB
         Claude["🤖 Claude CLI<br/>• System Architecture & State Machine Design (claude-design)<br/>• Prompt & Specification Refinement (claude-refine)<br/>• Pre-flight Git Diff Code Review (claude-review)"]
-        Codex["🧩 OpenAI Codex (Extensible)<br/>• Algorithmic & Language-Specific Optimizations"]
+        Codex["🧩 OpenAI Codex<br/>• Algorithmic & Performance Optimization, Terminal/CI Automation (codex-optimize)<br/>• Computer Use for GUI-driven verification (manual, via Codex desktop app)"]
     end
 
     Awareness -->|1. Assemble pinpoint context & initiate consultation| Claude
     Claude -->|2. Return architectural decision / review feedback| Engine
     Engine -->|3. Implement code & run TDD test suite| Supervisor
     Supervisor -->|4. Trigger pre-flight review before completion| Claude
+    Supervisor -.->|Optional: dispatch perf/automation tasks| Codex
     Supervisor --> Done(["🏁 High-Standard Task Completion & Delivery"])
 ```
 
@@ -55,18 +56,45 @@ Once installed, you can use these tools directly in any terminal or allow Antigr
 | **`claude-design`** | System architecture, state machines, trade-off analysis & research | `claude-design "<requirement>" [context_files...]` |
 | **`claude-refine`** | Spec optimization, JSON Schema refinement & prompt tuning | `claude-refine "<target_file>" "<optimization_goal>"` |
 | **`claude-review`** | Objective Git Diff code review, crash prevention & regression check | `claude-review HEAD "<task_context_description>"` |
+| **`codex-optimize`** | Algorithmic complexity/performance analysis & terminal/CI automation | `codex-optimize "<task_or_requirement>" [context_files...]` |
+
+---
+
+## 🧩 Claude CLI vs. OpenAI Codex: Picking the Right Peer
+
+Both are genuine coding agents; each is dispatched here for what it's actually best at:
+
+| Strength | Claude CLI | OpenAI Codex |
+| :--- | :--- | :--- |
+| Deep architecture / long-context reasoning across many files | ✅ Primary | — |
+| Rigorous, security-minded code review | ✅ Primary | — |
+| Spec / prompt / schema refinement | ✅ Primary | — |
+| Terminal, shell & CI pipeline automation | — | ✅ Leads (Terminal-Bench-style benchmarks) |
+| Algorithmic / performance-hotspot optimization | — | ✅ Primary (`codex-optimize`) |
+| Cost-per-task on high-volume, terminal-heavy work | — | ✅ Typically fewer tokens per task |
+| **Computer Use** — seeing the screen and driving mouse/keyboard to operate real GUI apps (browser, Figma, Xcode, Slack, etc.) | — | ✅ Native, but only via the **Codex desktop/ChatGPT app**, not the headless CLI |
+
+Computer Use is genuinely one of Codex's strengths, but it is an interactive, screen-driven capability — this repo's scripts are all non-interactive/headless (`codex exec`), so `codex-optimize` cannot drive a GUI. When a task truly needs visual/GUI verification (e.g. "does this actually render correctly in Figma/the browser?"), the orchestrator should say so explicitly and hand that step to a human (or the Codex desktop app) rather than pretending a headless script can do it.
 
 ---
 
 ## 🚀 1. Install Superpowers (Prerequisite Methodology)
 
-If you want your agent to follow structured engineering discipline (Brainstorming, Spec First, Implementation Plans, Red/Green TDD):
+If you want your agent to follow structured engineering discipline (Brainstorming, Spec First, Implementation Plans, Red/Green TDD), `install.sh` can attempt this for you non-interactively:
+
+```bash
+./install.sh --with-superpowers
+```
+
+This detects whichever driver CLI is on `PATH` (`agy` for Antigravity, `claude` for Claude Code) and runs its non-interactive plugin-install command. It can be combined with any other flag, e.g. `./install.sh --project . --with-superpowers`. Note that Claude Code's `/plugin install` is documented as an interactive-session command — if the non-interactive attempt fails, the script prints the manual fallback below instead of silently giving up.
+
+If it can't install automatically (CLI missing, or plugin install requires an interactive session), do it manually depending on your driver:
 
 * **Antigravity**:
   ```bash
   agy plugin install https://github.com/obra/superpowers
   ```
-* **Claude Code**:
+* **Claude Code** (run inside a Claude Code session):
   ```text
   /plugin install superpowers@claude-plugins-official
   ```
@@ -98,13 +126,17 @@ Select an installation target:
   3) Antigravity Global Skills (~/.gemini/...)
   4) Project-Local Skill (.agent/skills/ in current directory)
   5) Claude Code Global Skills (~/.claude/skills/)
+  6) Install Superpowers methodology plugin (Antigravity / Claude Code)
 ```
 
 ### Non-Interactive Flags (CI / Automated Scripts)
 * **Full Install**: `./install.sh --all`
 * **CLI Only**: `./install.sh --cli` (Symlinks to `~/.local/bin/`)
 * **Antigravity Global**: `./install.sh --antigravity-global` (Installs into `~/.gemini/skills/`)
-* **Project Local**: `./install.sh --project /path/to/project` (Installs into `.agent/skills/`)
+* **Project Local**: `./install.sh --project /path/to/project` (Installs into `.agent/skills/` and `.claude/skills/`, and injects the Multi-Agent Peer Collaboration Protocol into `/path/to/project/AGENTS.md` — pass `--no-agents-md` to skip that step)
+* **Superpowers**: `./install.sh --with-superpowers` (standalone, or combined with any flag above)
+
+> **Why inject into `AGENTS.md`?** Antigravity + Superpowers (and Codex CLI, and most agent CLIs) are driven by the project's `AGENTS.md`, not by `templates/AGENTS.md` in this repo — that file is just the source template. `--project` now writes the actual protocol block into your project's real `AGENTS.md` for you (idempotently: re-running the installer detects the existing block and skips it, and it only appends, never overwrites the rest of your file).
 
 ---
 
@@ -124,12 +156,15 @@ flowchart TD
         CD["claude-design<br/>(Architecture Validation & State Topology)"]
         CR["claude-refine<br/>(Spec & Prompt Refinement)"]
         CW["claude-review<br/>(Strict Git Diff Code Review)"]
+        CO["codex-optimize<br/>(Perf/Algorithmic & Terminal Automation)"]
     end
 
     B -.->|Antigravity Dispatches Consultation| CD
     P -.->|Antigravity Dispatches Refinement| CR
     T -.->|Antigravity Dispatches Pre-flight Review| CW
+    T -.->|Antigravity Dispatches Perf/Automation Pass| CO
     CW --> V
+    CO --> V
 ```
 
 ---

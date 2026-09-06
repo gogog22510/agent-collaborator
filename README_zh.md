@@ -25,13 +25,14 @@ flowchart TD
     subgraph PeerCouncil["🏛️ 外部專家顧問團 (External Peer Agents)"]
         direction TB
         Claude["🤖 Claude CLI<br/>• 系統架構與狀態機設計 (claude-design)<br/>• Prompt / 規格精煉 (claude-refine)<br/>• Git Diff 嚴格代碼審查 (claude-review)"]
-        Codex["🧩 OpenAI Codex (未來擴充)<br/>• 演算法與特定語言最佳化"]
+        Codex["🧩 OpenAI Codex<br/>• 演算法/效能最佳化與終端機/CI自動化 (codex-optimize)<br/>• Computer Use：GUI 視覺驗證（需透過 Codex 桌面應用程式手動操作）"]
     end
 
     Awareness -->|1. 提取精準上下文並發起諮詢| Claude
     Claude -->|2. 回傳架構決策 / 審查建議| Engine
     Engine -->|3. 執行寫代碼與 TDD 驗證| Supervisor
     Supervisor -->|4. 再次發起 Pre-flight 審查| Claude
+    Supervisor -.->|可選：派工效能/自動化任務| Codex
     Supervisor --> Done(["🏁 任務高標準驗收交付"])
 ```
 
@@ -51,18 +52,45 @@ flowchart TD
 | **`claude-design`** | 系統架構、狀態機、演算法方案對照與深層探索 | `claude-design "<需求描述>" [上下文檔案...]` |
 | **`claude-refine`** | Prompt、JSON Schema、規格文件專項精煉優化 | `claude-refine "<目標檔案>" "<優化目標>"` |
 | **`claude-review`** | Git Diff 審查、防範 Crash、邏輯漏洞與回歸風險 | `claude-review HEAD "<任務背景描述>"` |
+| **`codex-optimize`** | 演算法複雜度/效能瓶頸分析、終端機與 CI 自動化 | `codex-optimize "<任務或需求>" [上下文檔案...]` |
+
+---
+
+## 🧩 Claude CLI 與 OpenAI Codex：如何選擇
+
+兩者都是真正能寫代碼的 Agent，本專案依各自實際強項分派任務：
+
+| 強項 | Claude CLI | OpenAI Codex |
+| :--- | :--- | :--- |
+| 跨檔案深度架構 / 長上下文推理 | ✅ 主力 | — |
+| 嚴謹、重視安全性的代碼審查 | ✅ 主力 | — |
+| 規格 / Prompt / Schema 精煉 | ✅ 主力 | — |
+| 終端機、Shell 與 CI Pipeline 自動化 | — | ✅ 領先（Terminal-Bench 類基準表現佳）|
+| 演算法 / 效能瓶頸最佳化 | — | ✅ 主力（`codex-optimize`）|
+| 大量、終端機導向任務的單次成本 | — | ✅ 通常耗用 Token 更少 |
+| **Computer Use**：透過螢幕感知與滑鼠/鍵盤操作真實 GUI 應用（瀏覽器、Figma、Xcode、Slack 等）| — | ✅ 原生支援，但僅限 **Codex 桌面 / ChatGPT 應用程式**，非無頭 CLI |
+
+Computer Use 確實是 Codex 的真實強項之一，但它是互動式、依賴螢幕操作的能力——本專案的腳本皆為非互動 / 無頭模式 (`codex exec`)，因此 `codex-optimize` 無法驅動 GUI。當任務真的需要視覺 / GUI 驗證時（例如「這個變更在 Figma / 瀏覽器裡實際渲染是否正確？」），總指揮應明確說明，並交由人類操作員或 Codex 桌面應用程式處理，而非假裝無頭腳本能夠完成。
 
 ---
 
 ## 🚀 一、 安裝 Superpowers (先備方法論框架)
 
-若您希望讓 Agent 具備完整的工程方法論（規格設計、TDD、實作計畫）：
+若您希望讓 Agent 具備完整的工程方法論（規格設計、TDD、實作計畫），`install.sh` 可以幫您非互動地嘗試安裝：
+
+```bash
+./install.sh --with-superpowers
+```
+
+此指令會偵測 `PATH` 上有哪個驅動 CLI（Antigravity 用 `agy`，Claude Code 用 `claude`），並執行其非互動安裝指令；可與其他任何選項組合，例如 `./install.sh --project . --with-superpowers`。由於 Claude Code 的 `/plugin install` 官方文件說明僅支援互動式 session，若非互動嘗試失敗，腳本會印出下方的手動安裝方式，而非靜默失敗。
+
+若無法自動安裝（CLI 不存在，或該版本的 plugin install 僅限互動式 session），請依驅動手動執行：
 
 * **Antigravity**：
   ```bash
   agy plugin install https://github.com/obra/superpowers
   ```
-* **Claude Code**：
+* **Claude Code**（需在 Claude Code session 內執行）：
   ```text
   /plugin install superpowers@claude-plugins-official
   ```
@@ -95,7 +123,17 @@ Select an installation target:
   3) Antigravity Global Skills (~/.gemini/...)
   4) Project-Local Skill (.agent/skills/ in current directory)
   5) Claude Code Global Skills (~/.claude/skills/)
+  6) Install Superpowers methodology plugin (Antigravity / Claude Code)
 ```
+
+### 非互動旗標（CI / 自動化腳本）
+* **全裝**：`./install.sh --all`
+* **僅 CLI**：`./install.sh --cli`（symlink 到 `~/.local/bin/`）
+* **Antigravity Global**：`./install.sh --antigravity-global`
+* **Project Local**：`./install.sh --project /path/to/project`（安裝到 `.agent/skills/` 與 `.claude/skills/`，並將多代理人協同協議注入 `/path/to/project/AGENTS.md`；加 `--no-agents-md` 可跳過此步驟）
+* **Superpowers**：`./install.sh --with-superpowers`（可獨立使用，也可與上述任一選項組合）
+
+> **為什麼要注入 `AGENTS.md`？** Antigravity + Superpowers（以及 Codex CLI 等大多數 agent CLI）實際上是讀取專案的 `AGENTS.md` 來驅動行為，而不是本專案 `templates/AGENTS.md`——那份檔案只是來源範本。現在 `--project` 會自動把協議內容寫進您專案真正的 `AGENTS.md`（具冪等性：重複執行會偵測已存在的區塊並跳過，且只會附加內容，絕不覆蓋您檔案裡原有的其他內容）。
 
 ---
 
@@ -115,12 +153,15 @@ flowchart TD
         CD["claude-design<br/>(架構可行性與狀態機對照)"]
         CR["claude-refine<br/>(規格與 Prompt 精煉)"]
         CW["claude-review<br/>(Git Diff 嚴格代碼審查)"]
+        CO["codex-optimize<br/>(效能/演算法與終端機自動化)"]
     end
 
     B -.->|Antigravity 調度諮詢| CD
     P -.->|Antigravity 調度精煉| CR
     T -.->|Antigravity 調度審查| CW
+    T -.->|Antigravity 調度效能/自動化分析| CO
     CW --> V
+    CO --> V
 ```
 
 ---
