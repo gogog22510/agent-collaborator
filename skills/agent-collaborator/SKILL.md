@@ -29,6 +29,8 @@ Scripts auto-detect the current project type (`pubspec.yaml`, `package.json`, `C
 
 They are globally available at: `~/.gemini/config/skills/agent-collaborator/scripts/` (or locally at `.agent/skills/agent-collaborator/scripts/` or standalone in `~/.local/bin/`).
 
+> ⚠️ **Antigravity Sandbox Requirement**: External peer agent tools (`claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require outbound internet access to the Claude API. In Antigravity, you **MUST** run them using `run_command` with `BypassSandbox: true`. Do NOT run them in standard sandbox mode.
+
 ### 1. Architecture & Solution Design
 ```bash
 claude-design "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
@@ -53,10 +55,31 @@ codex-optimize "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
 # or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
 ```
 
-## Graceful Fallback Protocol
+## Asynchronous Execution & Anti-Premature Completion Protocol
 
-When calling any of the peer agent scripts:
-1. If the script outputs `⚠️ [FALLBACK_TRIGGERED: ...]` or exits with `100`:
-   - Log a non-blocking notice: *"External peer agent unavailable. Seamlessly switching to internal reasoning for this phase."*
-   - Antigravity immediately executes the Design, Review, Prompt Refinement, or Optimization task itself using its own model reasoning.
-   - The workflow never blocks or fails due to external API limits.
+Because Claude CLI and Codex perform deep LLM reasoning, commands typically take 15–30 seconds, exceeding Antigravity's maximum synchronous wait limit (10,000ms) and running as **background tasks**.
+
+### 🛑 CRITICAL: Do NOT Prematurely Finalize Milestones
+When a peer agent command (`claude-design`, `claude-review`, `claude-refine`, `codex-optimize`) is sent to the background:
+1. **The milestone is NOT complete**: You **MUST NOT** write a final `implementation_plan.md`, declare "設計已完成" (design completed) or "審查通過" (review passed), or invite the user to proceed. Doing so invalidates the peer collaboration.
+2. **End Your Turn & Wait**:
+   - Briefly notify the user (e.g. *"已啟動 `claude-design` 進行架構諮詢，正在等待 Claude 分析反饋以整合至設計計畫中..."*).
+   - **STOP calling tools immediately** to end your turn.
+   - The Antigravity messaging system will automatically wake you up with the full output as soon as the background task completes.
+3. **Synthesize Peer Feedback Upon Wake-Up**:
+   - When the task completes and delivers peer recommendations, thoroughly review architecture boundaries, state machine edge cases, and failure modes.
+   - Synthesize these insights directly into `implementation_plan.md` (under a dedicated section such as `### 🏛️ Peer Architecture Consultation`).
+   - Present the integrated, production-grade plan to the user only AFTER synthesis.
+
+## Sandbox Handling & Graceful Fallback Protocol
+
+### 1. Sandbox Permissions (Exit 126 / "Operation not permitted")
+- If a command fails with Exit 126, `Operation not permitted`, or outputs `❌ [SANDBOX_BLOCKED]`, this is a sandbox restriction error, **NOT** an API exhaustion or unavailable peer agent.
+- **DO NOT** trigger fallback to internal reasoning.
+- **ACTION**: Immediately re-run the command with `BypassSandbox: true` in `run_command`.
+
+### 2. Graceful Fallback Protocol (Exit Code 100)
+- Only when the script outputs `⚠️ [FALLBACK_TRIGGERED: ...]` or exits with `100` (due to actual API rate limits, quota exhaustion, or service outage):
+  1. Log a non-blocking notice: *"External peer agent unavailable. Seamlessly switching to internal reasoning for this phase."*
+  2. Antigravity immediately executes the Design, Review, Prompt Refinement, or Optimization task itself using its own model reasoning.
+  3. The workflow never blocks or fails due to external API limits.

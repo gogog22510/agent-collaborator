@@ -180,6 +180,12 @@ Ready-to-use integration contracts are available in the `templates/` directory:
 
 ## 🛡️ Graceful Self-Healing Fallback
 
+### Antigravity Sandbox Handling
+External peer agent tools (`claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require outbound internet access to the Claude API.
+- **`BypassSandbox: true` Requirement**: When Antigravity calls these tools via `run_command`, it must set `BypassSandbox: true`.
+- **Sandbox Isolation Error (Exit 126)**: If the command is mistakenly executed inside standard sandbox mode, it returns `❌ [SANDBOX_BLOCKED] (Exit: 126)`. The orchestrator will NOT fall back, and will immediately re-run with `BypassSandbox: true`.
+
+### True API Limit / Outage Fallback (Exit 100)
 When an external peer agent encounters:
 - Usage / Credit limits
 - Rate limits (429)

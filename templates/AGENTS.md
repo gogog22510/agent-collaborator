@@ -23,7 +23,10 @@
     - *Computer Use (GUI verification)*: Codex's screen-driven mouse/keyboard control is only available via the **Codex desktop/ChatGPT app**, not this headless CLI script. If a task needs actual GUI interaction (verifying a UI in a browser/Figma/Xcode/Slack), say so explicitly and route it to a human or the Codex app — do not assume `codex-optimize` can do it.
   - **Other Specialized Peer Agents (Extensible)**: see Section 3 below.
 
-> **Execution Note**: Directly invoke `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use the explicit absolute path `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
+> **Execution Note for Antigravity (Gemini)**:
+> 1. **Sandbox Bypass**: External peer agent tools (`claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require internet access to Claude API. You **MUST** execute them using `run_command` with `BypassSandbox: true`. Do NOT execute in standard sandbox mode.
+> 2. **Direct Invocation**: Directly invoke `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use the explicit absolute path `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
+> 3. **Sandbox Error Handling**: If an execution ever fails with Exit 126, "Operation not permitted", or outputs `❌ [SANDBOX_BLOCKED]`, it indicates standard sandbox mode blocked the host binary. Immediately re-run with `BypassSandbox: true`. DO NOT trigger fallback for sandbox errors.
 
 ---
 
@@ -42,7 +45,22 @@ At each engineering milestone, the Orchestrator MUST consult external peer agent
 
 ---
 
-## 3. Extensibility: Adding New Peer Agents (e.g., Custom/Local CLIs)
+## 3. Asynchronous Coordination & Anti-Premature Completion Protocol
+
+Because external peer agent CLIs perform deep LLM reasoning, commands typically take 15–30 seconds and will execute as **background tasks** in Antigravity.
+
+1. **Strictly Prohibit Premature Milestone Completion**:
+   - While `claude-design` or `claude-review` is running in the background, the milestone is **IN PROGRESS, NOT COMPLETE**.
+   - You **MUST NOT** finalize `implementation_plan.md`, declare "設計已完成" (design completed) or "審查已通過" (review passed), or prompt the user for execution approval while the task is still executing.
+2. **Turn Yielding & Reactive Wake-Up**:
+   - When `run_command` moves to the background: output a brief status update (e.g., *"已啟動 `claude-design` 進行架構諮詢，等待 Claude 分析完成以整合至計畫中..."*) and **STOP calling tools immediately** to end your turn.
+   - Do NOT poll or busy-wait. The Antigravity reactive messaging system will automatically wake you up when the peer agent finishes.
+3. **Mandatory Synthesis**:
+   - Upon wake-up with Claude's output, thoroughly examine Claude's recommendations, incorporate identified edge cases and failure modes into `implementation_plan.md`, and only then present the synthesized plan to the user.
+
+---
+
+## 4. Extensibility: Adding New Peer Agents (e.g., Custom/Local CLIs)
 
 To extend this workflow with additional external models beyond Claude CLI and Codex (e.g. local LLMs, other vendor CLIs):
 
@@ -54,12 +72,14 @@ To extend this workflow with additional external models beyond Claude CLI and Co
 
 ---
 
-## 4. Graceful Self-Healing Fallback Protocol
+## 5. Graceful Self-Healing Fallback Protocol
 
-- When any external peer agent CLI encounters API exhaustion, rate limits (429), or connectivity timeouts:
-  1. The script will emit `⚠️ [FALLBACK_TRIGGERED: ...]` and exit with code `100`.
-  2. The Orchestrator (Antigravity) will output a non-blocking log:
-     *"External peer agent [AgentName] unavailable. Seamlessly switching to internal reasoning."*
-  3. The Orchestrator immediately performs the review, design, or refinement internally.
-  4. **The workflow must NEVER crash, hang, or halt due to external API limits.**
+- **Sandbox Block vs. API Exhaustion Distinction**:
+  - If a script exits with `126`, outputs `Operation not permitted`, or outputs `❌ [SANDBOX_BLOCKED]`: Re-run immediately with `BypassSandbox: true`. Do NOT trigger fallback.
+  - Only when an external peer agent CLI encounters API exhaustion, rate limits (429), or connectivity timeouts (exit code 100):
+    1. The script will emit `⚠️ [FALLBACK_TRIGGERED: ...]` and exit with code `100`.
+    2. The Orchestrator (Antigravity) will output a non-blocking log:
+       *"External peer agent [AgentName] unavailable. Seamlessly switching to internal reasoning."*
+    3. The Orchestrator immediately performs the review, design, or refinement internally.
+    4. **The workflow must NEVER crash, hang, or halt due to external API limits.**
 ```

@@ -62,12 +62,18 @@ Since Superpowers/Antigravity are driven by your project's `AGENTS.md`, `--proje
   - `codex-optimize` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`): Algorithmic/performance analysis & terminal/CI automation, using Codex's actual strengths (Terminal-Bench-leading agentic shell tasks, cheaper per-task on high-volume work). Codex's **Computer Use** (GUI screen/mouse/keyboard control) only exists in the Codex desktop app, not this headless script — route GUI-verification needs there.
   - *(Extensible: Add other custom peer agent scripts under `.agent/skills/` or `~/.local/bin/`)*
 
-> **Execution Note**: Directly invoke `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use the explicit absolute path `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT run `which` or search for scripts.
+> **Execution Note for Antigravity (Gemini)**:
+> 1. **Sandbox Bypass**: External peer agent tools (`claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require internet access. You **MUST** execute them via `run_command` with `BypassSandbox: true`.
+> 2. **Direct Invocation**: Directly invoke `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
+> 3. **Sandbox Error Handling**: If exit 126 or "Operation not permitted" occurs, it means `BypassSandbox: true` was omitted. Immediately re-run with `BypassSandbox: true`. Do NOT switch to fallback.
 
 ## 2. Mandatory Rules
-- **Brainstorming / Plan**: Proactively consult peer agents (`claude-design` / `claude-refine`) to cross-reference designs and explore edge cases.
-- **Pre-flight Verification**: Run `claude-review` before finalizing plans or claiming task completion.
-- **Self-Healing Fallback**: If external peers hit limits (exit code 100), Antigravity seamlessly continues internally.
+- **Brainstorming / Plan**: Proactively consult peer agents (`claude-design` / `claude-refine`) with `BypassSandbox: true` to cross-reference designs and explore edge cases.
+- **Pre-flight Verification**: Run `claude-review` with `BypassSandbox: true` before finalizing plans or claiming task completion.
+- **Background Execution Synchronization**: When `claude-design` or `claude-review` runs in background (~15-30s), **DO NOT** prematurely output "設計已完成" or finalize `implementation_plan.md`. Yield the turn (stop calling tools) and wait for the reactive wake-up message, then synthesize Claude's findings into the final plan.
+- **Sandbox vs Fallback**:
+  - Exit 126 / Sandbox Block: Re-run with `BypassSandbox: true`.
+  - Exit 100 / Rate limit / Quota failure: Antigravity seamlessly continues internally with its own reasoning.
 ```
 
 ---

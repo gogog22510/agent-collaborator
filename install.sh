@@ -60,6 +60,38 @@ install_antigravity_global() {
     chmod +x "$T/scripts/"*.sh
     echo -e "${GREEN}✓ Installed to $T${NC}"
   done
+
+  # Synchronize global AGENTS.md multi-agent verification protocol
+  local PROTOCOL_FILE="$SCRIPT_DIR/templates/AGENTS.md"
+  if [ -f "$PROTOCOL_FILE" ]; then
+    if python3 - "$PROTOCOL_FILE" "$HOME" <<'EOF'
+import sys, os, re
+
+template_path = sys.argv[1]
+home_dir = sys.argv[2]
+
+with open(template_path, "r", encoding="utf-8") as f:
+    text = f.read()
+
+# Extract content between ```markdown and ``` code fences if present, otherwise whole text
+match = re.search(r"```markdown\n(.*?)\n```", text, re.DOTALL)
+content = match.group(1).strip() + "\n" if match else text
+
+targets = [
+    os.path.join(home_dir, ".gemini", "config", "AGENTS.md"),
+    os.path.join(home_dir, ".gemini", "AGENTS.md"),
+]
+for target in targets:
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    with open(target, "w", encoding="utf-8") as out:
+        out.write(content)
+EOF
+    then
+      echo -e "${GREEN}✓ Updated global AGENTS.md in ~/.gemini/config and ~/.gemini${NC}"
+    else
+      echo -e "${YELLOW}⚠ Failed to synchronize global AGENTS.md${NC}"
+    fi
+  fi
 }
 
 install_claude_code_global() {

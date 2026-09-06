@@ -177,6 +177,12 @@ flowchart TD
 
 ## 🛡️ 自動優雅降級機制 (Graceful Self-Healing Fallback)
 
+### Antigravity 沙盒環境注意 (Sandbox Handling)
+外部 Peer Agent 工具 (`claude-design`, `claude-refine`, `claude-review`) 需調用 Host 端本機二進位執行檔 (`~/.local/bin/claude`) 以及連線至 Anthropic 外部 API：
+- **`BypassSandbox: true` 必備**：在 Antigravity 透過 `run_command` 調用外部 Agent 時，必須加上 `BypassSandbox: true`。
+- **沙盒權限阻擋 (Exit 126)**：若在預設 Sandbox 內執行，會返回 `❌ [SANDBOX_BLOCKED] (Exit: 126)`。指揮官將**不會**觸發降級，而是立即補上 `BypassSandbox: true` 重新執行。
+
+### 真正的 API 額度 / 斷線降級 (Exit 100)
 當外部 Agent 遇到 API 額度用盡 (Usage Limit)、Rate Limit (429) 或連線超載 (529) 時，腳本會自動輸出 `⚠️ [FALLBACK_TRIGGERED: ...]`（Exit Code: `100`），總指揮（Antigravity）會無縫接管架構或審查工作，**絕不中斷任務流水線**。
 
 ---
