@@ -26,17 +26,21 @@ install_cli() {
   BIN_DIR="$HOME/.local/bin"
   mkdir -p "$BIN_DIR"
 
+  ln -sf "$SKILL_SRC/scripts/claude_brainstorm.sh" "$BIN_DIR/claude-brainstorm"
   ln -sf "$SKILL_SRC/scripts/claude_design.sh" "$BIN_DIR/claude-design"
   ln -sf "$SKILL_SRC/scripts/claude_review.sh" "$BIN_DIR/claude-review"
   ln -sf "$SKILL_SRC/scripts/claude_refine.sh" "$BIN_DIR/claude-refine"
+  ln -sf "$SKILL_SRC/scripts/codex_brainstorm.sh" "$BIN_DIR/codex-brainstorm"
   ln -sf "$SKILL_SRC/scripts/codex_optimize.sh" "$BIN_DIR/codex-optimize"
   rm -f "$BIN_DIR/claude-prompt-tune" 2>/dev/null || true
 
-  chmod +x "$BIN_DIR/claude-design" "$BIN_DIR/claude-review" "$BIN_DIR/claude-refine" "$BIN_DIR/codex-optimize"
+  chmod +x "$BIN_DIR/claude-brainstorm" "$BIN_DIR/claude-design" "$BIN_DIR/claude-review" "$BIN_DIR/claude-refine" "$BIN_DIR/codex-brainstorm" "$BIN_DIR/codex-optimize"
   echo -e "${GREEN}✓ CLI tools linked:${NC}"
+  echo "    - $BIN_DIR/claude-brainstorm"
   echo "    - $BIN_DIR/claude-design"
   echo "    - $BIN_DIR/claude-review"
   echo "    - $BIN_DIR/claude-refine"
+  echo "    - $BIN_DIR/codex-brainstorm"
   echo "    - $BIN_DIR/codex-optimize"
   if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo -e "${YELLOW}  ⚠ Note: Ensure $BIN_DIR is in your PATH in ~/.zshrc or ~/.bashrc${NC}"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Universal Claude Architecture & Design Script with Graceful Fallback
-# Usage: ./claude_design.sh "<TASK_OR_REQUIREMENT>" [FILE_PATHS...]
+# Universal Claude Brainstorming & Design Exploration Script with Graceful Fallback
+# Explores 2-3 distinct approaches, architectural trade-offs, edge cases, and user value.
+# Usage: ./claude_brainstorm.sh "<TASK_OR_REQUIREMENT>" [FILE_PATHS...]
 
 set -uo pipefail
 
@@ -33,23 +34,27 @@ for f in "$@"; do
   fi
 done
 
-PROMPT="You are a Principal Software Architect and Systems Engineer.
-Provide a rigorous, actionable architectural design for the specified requirement.
-CRITICAL: Do NOT invoke any tools or execute shell commands. Output your complete architectural design directly in text format based strictly on the provided context.
+PROMPT="You are a Principal Product & Systems Architect specializing in software ideation, design exploration, and systems trade-off analysis.
+Provide a divergent, rigorous, and actionable brainstorming exploration for the specified requirement.
+CRITICAL: Do NOT invoke any tools or execute shell commands. Output your complete brainstorming analysis directly in text format based strictly on the provided context.
 
 $PROJECT_HINT
 
-[Design Goal & Requirements]
+[Feature Requirement & Ideation Goal]
 $REQUIREMENT
 
 [Relevant Context Files]
 $FILE_CONTEXT
 
-Please output a structured, production-grade architectural design proposal covering:
-1. Core Architecture & Data Flow / State Management topology.
-2. Boundary conditions, error handling strategies, concurrency safety, and failure modes.
-3. Component/Interface definitions (APIs, Interfaces, Types) and key algorithm pseudocode.
-4. Recommended implementation breakdown and unit testing plan.
+Please output a structured, production-grade brainstorming analysis covering:
+1. Core Problem & Success Criteria: Clarify root user intent, primary value proposition, and key constraints.
+2. 2-3 Distinct Design / Architectural Approaches:
+   - Approach A (Minimalist / Incremental): Lowest implementation friction, minimal footprint, builds directly on existing patterns.
+   - Approach B (Modular / Robust / Extensible): High decoupling, clean separation of concerns, optimal for long-term evolution.
+   - Approach C (Pragmatic / Contrarian / Native): Rethinks the assumption—e.g. leveraging platform-native features, simplifying the data pipeline, or using alternative primitives.
+   For each approach, explicitly evaluate: Implementation Complexity, Maintenance Overhead, Potential Failure Modes, and Trade-offs.
+3. Edge Cases, Blind Spots & Critical Risks: Hidden assumptions, race conditions, offline/error behavior, and security/state boundaries.
+4. Decisive Recommendation & Phase Breakdown: Which approach to select and why, plus recommended verification milestones.
 "
 
 # Execute Claude CLI and capture stdout / stderr
@@ -90,7 +95,7 @@ if [ $EXIT_CODE -ne 0 ]; then
   exit 100
 fi
 
-# Check for rate limits or credit exhaustion in stderr
+# Check for rate limits or credit exhaustion in stderr or clear error strings
 if echo "$ERR_STR" | grep -qiE "(rate limit|usage limit|quota|exceeded|credit balance|overloaded|429|529|authentication)"; then
   echo "⚠️ [FALLBACK_TRIGGERED: CLAUDE_UNAVAILABLE]"
   echo "Reason: Claude CLI rate limit or service error."
@@ -107,4 +112,3 @@ if [ -z "$(echo "$OUTPUT_STR" | tr -d '[:space:]')" ]; then
 fi
 
 echo "$OUTPUT_STR"
-exit 0

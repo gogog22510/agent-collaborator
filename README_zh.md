@@ -24,8 +24,8 @@ flowchart TD
 
     subgraph PeerCouncil["🏛️ 外部專家顧問團 (External Peer Agents)"]
         direction TB
-        Claude["🤖 Claude CLI<br/>• 系統架構與狀態機設計 (claude-design)<br/>• Prompt / 規格精煉 (claude-refine)<br/>• Git Diff 嚴格代碼審查 (claude-review)"]
-        Codex["🧩 OpenAI Codex<br/>• 演算法/效能最佳化與終端機/CI自動化 (codex-optimize)<br/>• Computer Use：GUI 視覺驗證（需透過 Codex 桌面應用程式手動操作）"]
+        Claude["🤖 Claude CLI<br/>• 發散思維與方案評估 (claude-brainstorm)<br/>• 系統架構與狀態機設計 (claude-design)<br/>• Prompt / 規格精煉 (claude-refine)<br/>• Git Diff 嚴格代碼審查 (claude-review)"]
+        Codex["🧩 OpenAI Codex<br/>• 工程可行性與反向視角頭腦風暴 (codex-brainstorm)<br/>• 演算法/效能最佳化與終端機/CI自動化 (codex-optimize)<br/>• Computer Use：GUI 視覺驗證（需透過 Codex 桌面應用程式手動操作）"]
     end
 
     Awareness -->|1. 提取精準上下文並發起諮詢| Claude
@@ -49,7 +49,9 @@ flowchart TD
 
 | 指令 / 腳本 | 用途 | 使用範例 |
 | :--- | :--- | :--- |
-| **`claude-design`** | 系統架構、狀態機、演算法方案對照與深層探索 | `claude-design "<需求描述>" [上下文檔案...]` |
+| **`claude-brainstorm`** | 發散式頭腦風暴、2-3 種架構方案對照、邊界風險與權衡評估 | `claude-brainstorm "<需求描述>" [上下文檔案...]` |
+| **`codex-brainstorm`** | 工程可行性分析、標準庫/生態替代方案、極簡可行架構與反向思考 | `codex-brainstorm "<需求描述>" [上下文檔案...]` |
+| **`claude-design`** | 系統架構、狀態機、組件邊界與深度技術規格設計 | `claude-design "<需求描述>" [上下文檔案...]` |
 | **`claude-refine`** | Prompt、JSON Schema、規格文件專項精煉優化 | `claude-refine "<目標檔案>" "<優化目標>"` |
 | **`claude-review`** | Git Diff 審查、防範 Crash、邏輯漏洞與回歸風險 | `claude-review HEAD "<任務背景描述>"` |
 | **`codex-optimize`** | 演算法複雜度/效能瓶頸分析、終端機與 CI 自動化 | `codex-optimize "<任務或需求>" [上下文檔案...]` |
@@ -62,9 +64,11 @@ flowchart TD
 
 | 強項 | Claude CLI | OpenAI Codex |
 | :--- | :--- | :--- |
-| 跨檔案深度架構 / 長上下文推理 | ✅ 主力 | — |
-| 嚴謹、重視安全性的代碼審查 | ✅ 主力 | — |
-| 規格 / Prompt / Schema 精煉 | ✅ 主力 | — |
+| 發散式頭腦風暴與多方案權衡 | ✅ 主力（`claude-brainstorm`）| — |
+| 工程可行性評估與極簡可行架構 | — | ✅ 主力（`codex-brainstorm`）|
+| 跨檔案深度架構 / 長上下文推理 | ✅ 主力（`claude-design`）| — |
+| 嚴謹、重視安全性的代碼審查 | ✅ 主力（`claude-review`）| — |
+| 規格 / Prompt / Schema 精煉 | ✅ 主力（`claude-refine`）| — |
 | 終端機、Shell 與 CI Pipeline 自動化 | — | ✅ 領先（Terminal-Bench 類基準表現佳）|
 | 演算法 / 效能瓶頸最佳化 | — | ✅ 主力（`codex-optimize`）|
 | 大量、終端機導向任務的單次成本 | — | ✅ 通常耗用 Token 更少 |
@@ -169,13 +173,17 @@ flowchart TD
     end
 
     subgraph PeerAdvisors["🏛️ 外部專家審查 (Agent Collaborator)"]
+        CB["claude-brainstorm<br/>(發散思維與方案評估)"]
+        XB["codex-brainstorm<br/>(工程可行性與反向思考)"]
         CD["claude-design<br/>(架構可行性與狀態機對照)"]
         CR["claude-refine<br/>(規格與 Prompt 精煉)"]
         CW["claude-review<br/>(Git Diff 嚴格代碼審查)"]
         CO["codex-optimize<br/>(效能/演算法與終端機自動化)"]
     end
 
-    B -.->|Antigravity 調度諮詢| CD
+    B -.->|發散思維諮詢| CB
+    B -.->|工程可行性諮詢| XB
+    B -.->|架構設計諮詢| CD
     P -.->|Antigravity 調度精煉| CR
     T -.->|Antigravity 調度審查| CW
     T -.->|Antigravity 調度效能/自動化分析| CO

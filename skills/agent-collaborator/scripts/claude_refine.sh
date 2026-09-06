@@ -50,8 +50,8 @@ OUTPUT_STR=$(cat "$TEMP_OUTPUT")
 ERR_STR=$(cat "$TEMP_ERR")
 rm -f "$TEMP_OUTPUT" "$TEMP_ERR"
 
-# Check for usage limits, rate limits, or connection failures
-if [ $EXIT_CODE -ne 0 ] || echo "$OUTPUT_STR $ERR_STR" | grep -qiE "(rate limit|usage limit|quota|exceeded|credit balance|overloaded|429|529|authentication)"; then
+# Check for execution errors or sandbox blocking
+if [ $EXIT_CODE -ne 0 ]; then
   if [ $EXIT_CODE -eq 126 ] || echo "$ERR_STR" | grep -qiE "(operation not permitted|permission denied)"; then
     echo "❌ [SANDBOX_BLOCKED: BypassSandbox=true REQUIRED]"
     echo "Reason: Sandbox execution blocked or permission denied (Exit: $EXIT_CODE)."
@@ -70,10 +70,26 @@ if [ $EXIT_CODE -ne 0 ] || echo "$OUTPUT_STR $ERR_STR" | grep -qiE "(rate limit|
   fi
 
   echo "⚠️ [FALLBACK_TRIGGERED: CLAUDE_UNAVAILABLE]"
-  echo "Reason: Claude CLI usage limit, connection, or execution error (Exit: $EXIT_CODE)."
+  echo "Reason: Claude CLI execution error (Exit: $EXIT_CODE)."
   if [ -n "$ERR_STR" ]; then
     echo "Detail: $ERR_STR"
   fi
+  exit 100
+fi
+
+# Check for rate limits or credit exhaustion in stderr
+if echo "$ERR_STR" | grep -qiE "(rate limit|usage limit|quota|exceeded|credit balance|overloaded|429|529|authentication)"; then
+  echo "⚠️ [FALLBACK_TRIGGERED: CLAUDE_UNAVAILABLE]"
+  echo "Reason: Claude CLI rate limit or service error."
+  if [ -n "$ERR_STR" ]; then
+    echo "Detail: $ERR_STR"
+  fi
+  exit 100
+fi
+
+if [ -z "$(echo "$OUTPUT_STR" | tr -d '[:space:]')" ]; then
+  echo "⚠️ [FALLBACK_TRIGGERED: CLAUDE_UNAVAILABLE]"
+  echo "Reason: Claude CLI returned empty response."
   exit 100
 fi
 

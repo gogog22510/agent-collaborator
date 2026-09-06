@@ -10,10 +10,12 @@ This skill enables a universal, language-agnostic **Multi-Agent / Dual-Agent Wor
 ## Roles & Division of Labor
 
 - **Claude CLI (Primary Architect & Reviewer)**:
+  - Divergent ideation & approach trade-offs (`claude_brainstorm.sh`)
   - Deep architecture & state-machine design (`claude_design.sh`)
   - Rigorous code review, vulnerability detection & regression prevention (`claude_review.sh`)
   - Spec / Prompt / Documentation refinement (`claude_refine.sh`)
 - **OpenAI Codex (Performance & Automation Specialist)** — dispatch here when the task plays to Codex's actual strengths:
+  - Engineering feasibility, ecosystem alternatives & contrarian perspectives (`codex_brainstorm.sh`)
   - Algorithmic complexity / performance-hotspot analysis and heavy shell/CLI/CI automation (`codex_optimize.sh`). Codex leads Terminal-Bench-style agentic shell tasks and typically uses far fewer tokens per task, making it the cheaper choice for high-volume, terminal-heavy consultations.
   - Second opinion / cross-model verification on architecture or review conclusions from Claude, when trade-offs are contentious.
   - **Computer Use (GUI-driven tasks)**: recent Codex (via the ChatGPT desktop/Codex app, not the headless CLI) can see the screen and drive the mouse/keyboard to operate real apps (browser, Figma, Xcode, Slack, etc.). This is genuinely useful for visually verifying a UI change, testing an external app's behavior, or interacting with tools that have no CLI/API — but it is **not scriptable non-interactively** the way `codex exec` is. When a task needs this, tell the user/operator to drive it manually from the Codex desktop app rather than expecting an automated script to do it; do not fabricate a headless "computer use" script.
@@ -29,27 +31,39 @@ Scripts auto-detect the current project type (`pubspec.yaml`, `package.json`, `C
 
 They are globally available at: `~/.gemini/config/skills/agent-collaborator/scripts/` (or locally at `.agent/skills/agent-collaborator/scripts/` or standalone in `~/.local/bin/`).
 
-> ⚠️ **Antigravity Sandbox Requirement**: External peer agent tools (`claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require outbound internet access to the Claude API. In Antigravity, you **MUST** run them using `run_command` with `BypassSandbox: true`. Do NOT run them in standard sandbox mode.
+> ⚠️ **Antigravity Sandbox Requirement**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require outbound internet access to the Claude API. In Antigravity, you **MUST** run them using `run_command` with `BypassSandbox: true`. Do NOT run them in standard sandbox mode.
 
-### 1. Architecture & Solution Design
+### 1. Divergent Brainstorming & Ideation (Claude)
+```bash
+claude-brainstorm "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+```
+
+### 2. Engineering Feasibility & Contrarian Brainstorming (Codex)
+```bash
+codex-brainstorm "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+```
+
+### 3. Architecture & Solution Design
 ```bash
 claude-design "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
 # or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
 ```
 
-### 2. Universal Code Review
+### 4. Universal Code Review
 ```bash
 claude-review [BASE_GIT_REF] "<TASK_DESCRIPTION>"
 # or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh [BASE_GIT_REF] "<TASK_DESCRIPTION>"
 ```
 
-### 3. Prompt & Spec Refinement
+### 5. Prompt & Spec Refinement
 ```bash
 claude-refine "<FILE_PATH>" "<OPTIMIZATION_GOAL>"
 # or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh "<FILE_PATH>" "<OPTIMIZATION_GOAL>"
 ```
 
-### 4. Algorithmic / Performance / Terminal Automation (Codex)
+### 6. Algorithmic / Performance / Terminal Automation (Codex)
 ```bash
 codex-optimize "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
 # or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
@@ -60,7 +74,7 @@ codex-optimize "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
 Because Claude CLI and Codex perform deep LLM reasoning, commands typically take 15–30 seconds, exceeding Antigravity's maximum synchronous wait limit (10,000ms) and running as **background tasks**.
 
 ### 🛑 CRITICAL: Do NOT Prematurely Finalize Milestones
-When a peer agent command (`claude-design`, `claude-review`, `claude-refine`, `codex-optimize`) is sent to the background:
+When a peer agent command (`claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-review`, `claude-refine`, `codex-optimize`) is sent to the background:
 1. **The milestone is NOT complete**: You **MUST NOT** write a final `implementation_plan.md`, declare "設計已完成" (design completed) or "審查通過" (review passed), or invite the user to proceed. Doing so invalidates the peer collaboration.
 2. **End Your Turn & Wait**:
    - Briefly notify the user (e.g. *"已啟動 `claude-design` 進行架構諮詢，正在等待 Claude 分析反饋以整合至設計計畫中..."*).

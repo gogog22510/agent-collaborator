@@ -28,8 +28,8 @@ flowchart TD
 
     subgraph PeerCouncil["🏛️ External Peer Advisory Council"]
         direction TB
-        Claude["🤖 Claude CLI<br/>• System Architecture & State Machine Design (claude-design)<br/>• Prompt & Specification Refinement (claude-refine)<br/>• Pre-flight Git Diff Code Review (claude-review)"]
-        Codex["🧩 OpenAI Codex<br/>• Algorithmic & Performance Optimization, Terminal/CI Automation (codex-optimize)<br/>• Computer Use for GUI-driven verification (manual, via Codex desktop app)"]
+        Claude["🤖 Claude CLI<br/>• Ideation & Approach Trade-offs (claude-brainstorm)<br/>• System Architecture & State Machine Design (claude-design)<br/>• Prompt & Specification Refinement (claude-refine)<br/>• Pre-flight Git Diff Code Review (claude-review)"]
+        Codex["🧩 OpenAI Codex<br/>• Engineering Feasibility & Contrarian Ideation (codex-brainstorm)<br/>• Algorithmic & Performance Optimization, Terminal/CI Automation (codex-optimize)<br/>• Computer Use for GUI-driven verification (manual, via Codex desktop app)"]
     end
 
     Awareness -->|1. Assemble pinpoint context & initiate consultation| Claude
@@ -53,7 +53,9 @@ Once installed, you can use these tools directly in any terminal or allow Antigr
 
 | Command / Script | Purpose | Usage Example |
 | :--- | :--- | :--- |
-| **`claude-design`** | System architecture, state machines, trade-off analysis & research | `claude-design "<requirement>" [context_files...]` |
+| **`claude-brainstorm`** | Divergent ideation, 2-3 distinct approaches, trade-offs & edge cases | `claude-brainstorm "<requirement>" [context_files...]` |
+| **`codex-brainstorm`** | Engineering feasibility, ecosystem/standard library alternatives & contrarian pass | `codex-brainstorm "<requirement>" [context_files...]` |
+| **`claude-design`** | System architecture, state machines, component API boundaries & research | `claude-design "<requirement>" [context_files...]` |
 | **`claude-refine`** | Spec optimization, JSON Schema refinement & prompt tuning | `claude-refine "<target_file>" "<optimization_goal>"` |
 | **`claude-review`** | Objective Git Diff code review, crash prevention & regression check | `claude-review HEAD "<task_context_description>"` |
 | **`codex-optimize`** | Algorithmic complexity/performance analysis & terminal/CI automation | `codex-optimize "<task_or_requirement>" [context_files...]` |
@@ -66,9 +68,11 @@ Both are genuine coding agents; each is dispatched here for what it's actually b
 
 | Strength | Claude CLI | OpenAI Codex |
 | :--- | :--- | :--- |
-| Deep architecture / long-context reasoning across many files | ✅ Primary | — |
-| Rigorous, security-minded code review | ✅ Primary | — |
-| Spec / prompt / schema refinement | ✅ Primary | — |
+| Divergent brainstorming & approach trade-offs | ✅ Primary (`claude-brainstorm`) | — |
+| Engineering feasibility & minimal viable architecture | — | ✅ Primary (`codex-brainstorm`) |
+| Deep architecture / long-context reasoning across many files | ✅ Primary (`claude-design`) | — |
+| Rigorous, security-minded code review | ✅ Primary (`claude-review`) | — |
+| Spec / prompt / schema refinement | ✅ Primary (`claude-refine`) | — |
 | Terminal, shell & CI pipeline automation | — | ✅ Leads (Terminal-Bench-style benchmarks) |
 | Algorithmic / performance-hotspot optimization | — | ✅ Primary (`codex-optimize`) |
 | Cost-per-task on high-volume, terminal-heavy work | — | ✅ Typically fewer tokens per task |
@@ -172,13 +176,17 @@ flowchart TD
     end
 
     subgraph PeerAdvisors["🏛️ External Peer Advisory (Agent Collaborator)"]
+        CB["claude-brainstorm<br/>(Divergent Ideation & Trade-offs)"]
+        XB["codex-brainstorm<br/>(Engineering Feasibility & Minimal Design)"]
         CD["claude-design<br/>(Architecture Validation & State Topology)"]
         CR["claude-refine<br/>(Spec & Prompt Refinement)"]
         CW["claude-review<br/>(Strict Git Diff Code Review)"]
         CO["codex-optimize<br/>(Perf/Algorithmic & Terminal Automation)"]
     end
 
-    B -.->|Antigravity Dispatches Consultation| CD
+    B -.->|Ideation Pass| CB
+    B -.->|Feasibility Pass| XB
+    B -.->|Architecture Pass| CD
     P -.->|Antigravity Dispatches Refinement| CR
     T -.->|Antigravity Dispatches Pre-flight Review| CW
     T -.->|Antigravity Dispatches Perf/Automation Pass| CO

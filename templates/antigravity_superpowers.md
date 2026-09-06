@@ -56,6 +56,8 @@ Since Superpowers/Antigravity are driven by your project's `AGENTS.md`, `--proje
 ## 1. Roles & Division of Labor
 - **Central Orchestrator (Antigravity / Gemini)**: Full context awareness, toolchain execution, TDD implementation, and fallback.
 - **Peer Advisory Council (Claude CLI / OpenAI Codex / Custom)**:
+  - `claude-brainstorm` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`): Ideation & approach trade-offs (2-3 distinct approaches)
+  - `codex-brainstorm` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`): Engineering feasibility, standard library alternatives & contrarian perspectives
   - `claude-design` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`): Architectural design & state-machine exploration
   - `claude-refine` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`): Spec & prompt optimization
   - `claude-review` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`): Pre-flight git diff code review
@@ -63,14 +65,14 @@ Since Superpowers/Antigravity are driven by your project's `AGENTS.md`, `--proje
   - *(Extensible: Add other custom peer agent scripts under `.agent/skills/` or `~/.local/bin/`)*
 
 > **Execution Note for Antigravity (Gemini)**:
-> 1. **Sandbox Bypass**: External peer agent tools (`claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require internet access. You **MUST** execute them via `run_command` with `BypassSandbox: true`.
-> 2. **Direct Invocation**: Directly invoke `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
+> 1. **Sandbox Bypass**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require internet access. You **MUST** execute them via `run_command` with `BypassSandbox: true`.
+> 2. **Direct Invocation**: Directly invoke `claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
 > 3. **Sandbox Error Handling**: If exit 126 or "Operation not permitted" occurs, it means `BypassSandbox: true` was omitted. Immediately re-run with `BypassSandbox: true`. Do NOT switch to fallback.
 
 ## 2. Mandatory Rules
-- **Brainstorming / Plan**: Proactively consult peer agents (`claude-design` / `claude-refine`) with `BypassSandbox: true` to cross-reference designs and explore edge cases.
+- **Brainstorming / Plan**: Proactively consult peer agents (`claude-brainstorm` / `codex-brainstorm` / `claude-design` / `claude-refine`) with `BypassSandbox: true` to cross-reference designs and explore edge cases.
 - **Pre-flight Verification**: Run `claude-review` with `BypassSandbox: true` before finalizing plans or claiming task completion.
-- **Background Execution Synchronization**: When `claude-design` or `claude-review` runs in background (~15-30s), **DO NOT** prematurely output "設計已完成" or finalize `implementation_plan.md`. Yield the turn (stop calling tools) and wait for the reactive wake-up message, then synthesize Claude's findings into the final plan.
+- **Background Execution Synchronization**: When `claude-brainstorm`, `codex-brainstorm`, `claude-design` or `claude-review` runs in background (~15-30s), **DO NOT** prematurely output "設計已完成" or finalize `implementation_plan.md`. Yield the turn (stop calling tools) and wait for the reactive wake-up message, then synthesize peer findings into the final plan.
 - **Sandbox vs Fallback**:
   - Exit 126 / Sandbox Block: Re-run with `BypassSandbox: true`.
   - Exit 100 / Rate limit / Quota failure: Antigravity seamlessly continues internally with its own reasoning.
@@ -92,12 +94,16 @@ flowchart TD
     end
 
     subgraph PeerAdvisors["🏛️ Peer Advisory Council (Claude / Codex / Extensible)"]
+        CB["claude-brainstorm<br/>(Divergent Ideation & Trade-offs)"]
+        XB["codex-brainstorm<br/>(Engineering Feasibility & Minimal Design)"]
         CD["claude-design<br/>(Architecture Validation & Boundary Check)"]
         CR["claude-refine<br/>(Spec & Prompt Refinement)"]
         CW["claude-review<br/>(Strict Git Diff Code Review)"]
         CO["codex-optimize<br/>(Perf/Algorithmic & Terminal Automation)"]
     end
 
+    B -.-> CB
+    B -.-> XB
     B -.-> CD
     P -.-> CR
     T -.-> CW
