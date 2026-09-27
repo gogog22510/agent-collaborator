@@ -49,12 +49,20 @@ flowchart TD
 
 | 指令 / 腳本 | 用途 | 使用範例 |
 | :--- | :--- | :--- |
-| **`claude-brainstorm`** | 發散式頭腦風暴、2-3 種架構方案對照、邊界風險與權衡評估 | `claude-brainstorm "<需求描述>" [上下文檔案...]` |
-| **`codex-brainstorm`** | 工程可行性分析、標準庫/生態替代方案、極簡可行架構與反向思考 | `codex-brainstorm "<需求描述>" [上下文檔案...]` |
-| **`claude-design`** | 系統架構、狀態機、組件邊界與深度技術規格設計 | `claude-design "<需求描述>" [上下文檔案...]` |
-| **`claude-refine`** | Prompt、JSON Schema、規格文件專項精煉優化 | `claude-refine "<目標檔案>" "<優化目標>"` |
-| **`claude-review`** | Git Diff 審查、防範 Crash、邏輯漏洞與回歸風險 | `claude-review HEAD "<任務背景描述>"` |
-| **`codex-optimize`** | 演算法複雜度/效能瓶頸分析、終端機與 CI 自動化 | `codex-optimize "<任務或需求>" [上下文檔案...]` |
+| **`claude-brainstorm`** | 發散式頭腦風暴、2-3 種架構方案對照、邊界風險與權衡評估 | `claude-brainstorm [--model <model>] "<需求描述>" [上下文檔案...]` |
+| **`codex-brainstorm`** | 工程可行性分析、標準庫/生態替代方案、極簡可行架構與反向思考 | `codex-brainstorm [--model <model>] "<需求描述>" [上下文檔案...]` |
+| **`claude-design`** | 系統架構、狀態機、組件邊界與深度技術規格設計 | `claude-design [--model <model>] "<需求描述>" [上下文檔案...]` |
+| **`claude-refine`** | Prompt、JSON Schema、規格文件專項精煉優化 | `claude-refine [--model <model>] "<目標檔案>" "<優化目標>"` |
+| **`claude-review`** | Git Diff 審查、防範 Crash、邏輯漏洞與回歸風險 | `claude-review [--model <model>] [BASE_REF] "<任務背景描述>"` |
+| **`codex-optimize`** | 演算法複雜度/效能瓶頸分析、終端機與 CI 自動化 | `codex-optimize [--model <model>] "<任務或需求>" [上下文檔案...]` |
+
+### 🎛️ 動態模型切換與任務分級
+所有腳本皆支援即時切換模型，具備三層優先級規則：
+1. **CLI 參數最優先**：`--model <name>` 或 `-m <name>`（例如 `claude-brainstorm --model haiku "..."` 或 `codex-optimize -m o3-mini "..."`）
+2. **環境變數次之**：Claude 系列使用 `CLAUDE_MODEL`，Codex 系列使用 `CODEX_MODEL`，或使用 `AGENT_MODEL` 作為全域後備（例如 `CLAUDE_MODEL=opus claude-design "..."`）
+3. **原生預設（無指定）**：直接沿用底層 `claude` 或 `codex` CLI 目前配置的預設模型。
+
+這讓 Antigravity 可以自主依任務複雜度分級調度：小型 Prompt 調整與簡易審查調用輕快省 Token 的模型（如 `haiku`、`o3-mini`），而關鍵系統架構與上線前安全審核則使用頂級旗艦模型（如 `sonnet`、`opus`、`o3`）。
 
 ---
 

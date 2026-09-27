@@ -2,14 +2,59 @@
 # Universal OpenAI Codex Algorithmic / Performance / Terminal-Automation Script with Graceful Fallback
 # Plays to Codex's real strengths: leading Terminal-Bench agentic shell automation,
 # algorithmic & performance optimization, and lower cost-per-token on high-volume tasks.
-# Usage: ./codex_optimize.sh "<TASK_OR_REQUIREMENT>" [FILE_PATHS...]
+# Usage: ./codex_optimize.sh [--model <model>] "<TASK_OR_REQUIREMENT>" [FILE_PATHS...]
 
 set -uo pipefail
+
+MODEL=""
+POSITIONAL_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model|-m)
+      if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
+        MODEL="$2"
+        shift 2
+      else
+        echo "Error: --model requires an argument." >&2
+        exit 1
+      fi
+      ;;
+    --model=*)
+      MODEL="${1#*=}"
+      if [[ -z "$MODEL" ]]; then
+        echo "Error: --model requires an argument." >&2
+        exit 1
+      fi
+      shift
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--model <model>] \"<TASK_OR_REQUIREMENT>\" [FILE_PATHS...]"
+      echo "Options:"
+      echo "  -m, --model <model>  Model for Codex CLI (e.g. o3-mini, gpt-4o)"
+      echo "                       Env fallback: CODEX_MODEL, AGENT_MODEL"
+      exit 0
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
+
+if [ -z "$MODEL" ]; then
+  MODEL="${CODEX_MODEL:-${AGENT_MODEL:-}}"
+fi
+
+MODEL_ARGS=()
+if [ -n "$MODEL" ]; then
+  MODEL_ARGS=(-m "$MODEL")
+fi
 
 REQUIREMENT="${1:-}"
 if [ -z "$REQUIREMENT" ]; then
   echo "Error: Missing requirement prompt." >&2
-  echo "Usage: $0 \"<TASK_OR_REQUIREMENT>\" [FILE_PATHS...]" >&2
+  echo "Usage: $0 [--model <model>] \"<TASK_OR_REQUIREMENT>\" [FILE_PATHS...]" >&2
   exit 1
 fi
 shift
@@ -58,7 +103,7 @@ Please output a structured, production-grade report covering:
 TEMP_OUTPUT=$(mktemp)
 TEMP_ERR=$(mktemp)
 
-echo "$PROMPT" | codex exec --sandbox read-only --skip-git-repo-check - > "$TEMP_OUTPUT" 2> "$TEMP_ERR"
+echo "$PROMPT" | codex exec "${MODEL_ARGS[@]}" --sandbox read-only --skip-git-repo-check - > "$TEMP_OUTPUT" 2> "$TEMP_ERR"
 EXIT_CODE=$?
 
 OUTPUT_STR=$(cat "$TEMP_OUTPUT")

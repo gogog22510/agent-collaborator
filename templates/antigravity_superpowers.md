@@ -56,12 +56,13 @@ Since Superpowers/Antigravity are driven by your project's `AGENTS.md`, `--proje
 ## 1. Roles & Division of Labor
 - **Central Orchestrator (Antigravity / Gemini)**: Full context awareness, toolchain execution, TDD implementation, and fallback.
 - **Peer Advisory Council (Claude CLI / OpenAI Codex / Custom)**:
-  - `claude-brainstorm` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`): Ideation & approach trade-offs (2-3 distinct approaches)
-  - `codex-brainstorm` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`): Engineering feasibility, standard library alternatives & contrarian perspectives
-  - `claude-design` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`): Architectural design & state-machine exploration
-  - `claude-refine` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`): Spec & prompt optimization
-  - `claude-review` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`): Pre-flight git diff code review
-  - `codex-optimize` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`): Algorithmic/performance analysis & terminal/CI automation, using Codex's actual strengths (Terminal-Bench-leading agentic shell tasks, cheaper per-task on high-volume work). Codex's **Computer Use** (GUI screen/mouse/keyboard control) only exists in the Codex desktop app, not this headless script — route GUI-verification needs there.
+  - `claude-brainstorm [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`): Ideation & approach trade-offs (2-3 distinct approaches)
+  - `codex-brainstorm [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`): Engineering feasibility, standard library alternatives & contrarian perspectives
+  - `claude-design [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`): Architectural design & state-machine exploration
+  - `claude-refine [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`): Spec & prompt optimization
+  - `claude-review [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`): Pre-flight git diff code review
+  - `codex-optimize [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`): Algorithmic/performance analysis & terminal/CI automation, using Codex's actual strengths (Terminal-Bench-leading agentic shell tasks, cheaper per-task on high-volume work). Codex's **Computer Use** (GUI screen/mouse/keyboard control) only exists in the Codex desktop app, not this headless script — route GUI-verification needs there.
+  - *Model Selection*: All commands support `--model <name>` / `-m <name>` or environment variables (`CLAUDE_MODEL`, `CODEX_MODEL`, `AGENT_MODEL`). Antigravity can choose fast models (`haiku`, `o3-mini`) for lightweight tasks or top models (`opus`, `sonnet`, `o3`) for deep architectures.
   - *(Extensible: Add other custom peer agent scripts under `.agent/skills/` or `~/.local/bin/`)*
 
 > **Execution Note for Antigravity (Gemini)**:

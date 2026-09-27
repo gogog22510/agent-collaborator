@@ -33,40 +33,52 @@ They are globally available at: `~/.gemini/config/skills/agent-collaborator/scri
 
 > ⚠️ **Antigravity Sandbox Requirement**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require outbound internet access to the Claude API. In Antigravity, you **MUST** run them using `run_command` with `BypassSandbox: true`. Do NOT run them in standard sandbox mode.
 
+### Dynamic Model Switching
+All scripts support dynamic model switching with 3-tier precedence:
+1. **CLI Flag**: `--model <model>` or `-m <model>` (e.g. `--model haiku`, `--model opus`, `-m o3-mini`)
+2. **Environment Variable**: `CLAUDE_MODEL` (for Claude) or `CODEX_MODEL` (for Codex), with `AGENT_MODEL` as unified fallback.
+3. **Default**: When unspecified, uses the CLI tool's default configured model.
+
 ### 1. Divergent Brainstorming & Ideation (Claude)
 ```bash
-claude-brainstorm "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+claude-brainstorm [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# Example with fast model: claude-brainstorm --model haiku "Simple state transition"
 ```
 
 ### 2. Engineering Feasibility & Contrarian Brainstorming (Codex)
 ```bash
-codex-brainstorm "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+codex-brainstorm [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# Example: CODEX_MODEL=o3-mini codex-brainstorm "Concurrency memory model"
 ```
 
 ### 3. Architecture & Solution Design
 ```bash
-claude-design "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+claude-design [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# Example with flagship model: claude-design --model opus "Distributed cache state machine"
 ```
 
 ### 4. Universal Code Review
 ```bash
-claude-review [BASE_GIT_REF] "<TASK_DESCRIPTION>"
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh [BASE_GIT_REF] "<TASK_DESCRIPTION>"
+claude-review [--model <model>] [BASE_GIT_REF] "<TASK_DESCRIPTION>"
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh [--model <model>] [BASE_GIT_REF] "<TASK_DESCRIPTION>"
+# Example: claude-review --model sonnet HEAD "Pre-flight security and regression audit"
 ```
 
 ### 5. Prompt & Spec Refinement
 ```bash
-claude-refine "<FILE_PATH>" "<OPTIMIZATION_GOAL>"
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh "<FILE_PATH>" "<OPTIMIZATION_GOAL>"
+claude-refine [--model <model>] "<FILE_PATH>" "<OPTIMIZATION_GOAL>"
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh [--model <model>] "<FILE_PATH>" "<OPTIMIZATION_GOAL>"
+# Example: CLAUDE_MODEL=haiku claude-refine schema.json "Tighten validation regexes"
 ```
 
 ### 6. Algorithmic / Performance / Terminal Automation (Codex)
 ```bash
-codex-optimize "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+codex-optimize [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# Example: codex-optimize -m o3-mini "Vector search cosine similarity loop"
 ```
 
 ## Asynchronous Execution & Anti-Premature Completion Protocol

@@ -24,15 +24,18 @@
 
 - **Peer Advisory Council (External Specialized Agents)**:
   - **Claude CLI (`agent-collaborator`)**:
-    - *Ideation & Approach Trade-offs*: `claude-brainstorm "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`)
-    - *System Architecture & State Machines*: `claude-design "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`)
-    - *Spec, Schema & Prompt Refinement*: `claude-refine "<target_file>" "<goal>"` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`)
-    - *Pre-flight Git Diff Code Review*: `claude-review [BASE_REF] "<task_description>"` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`)
+    - *Ideation & Approach Trade-offs*: `claude-brainstorm [--model <model>] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`)
+    - *System Architecture & State Machines*: `claude-design [--model <model>] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`)
+    - *Spec, Schema & Prompt Refinement*: `claude-refine [--model <model>] "<target_file>" "<goal>"` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`)
+    - *Pre-flight Git Diff Code Review*: `claude-review [--model <model>] [BASE_REF] "<task_description>"` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`)
   - **OpenAI Codex (`agent-collaborator`)**:
-    - *Engineering Feasibility & Contrarian Ideation*: `codex-brainstorm "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`)
-    - *Algorithmic, Performance & Terminal/CI Automation*: `codex-optimize "<task_or_requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`)
+    - *Engineering Feasibility & Contrarian Ideation*: `codex-brainstorm [--model <model>] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`)
+    - *Algorithmic, Performance & Terminal/CI Automation*: `codex-optimize [--model <model>] "<task_or_requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`)
     - *Cross-Model Second Opinion*: Consult Codex when architecture or review trade-offs from Claude require a contrasting perspective.
     - *Computer Use (GUI verification)*: Codex's screen-driven mouse/keyboard control is only available via the **Codex desktop/ChatGPT app**, not this headless CLI script. If a task needs actual GUI interaction (verifying a UI in a browser/Figma/Xcode/Slack), say so explicitly and route it to a human or the Codex app — do not assume `codex-optimize` can do it.
+  - **Model Selection & Sizing**:
+    - All peer agent commands support dynamic model specification via `--model <name>` / `-m <name>` or environment variables (`CLAUDE_MODEL`, `CODEX_MODEL`, `AGENT_MODEL`).
+    - The Orchestrator (Antigravity) can select faster/cost-effective models (e.g. `haiku`, `o3-mini`) for lightweight tasks or top-tier models (e.g. `opus`, `sonnet`, `o3`) for critical architectural design and security reviews.
   - **Other Specialized Peer Agents (Extensible)**: see Section 4 below.
 
 > **Execution Notes by Driver Platform**:

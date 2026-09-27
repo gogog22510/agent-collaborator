@@ -53,12 +53,20 @@ Once installed, you can use these tools directly in any terminal or allow Antigr
 
 | Command / Script | Purpose | Usage Example |
 | :--- | :--- | :--- |
-| **`claude-brainstorm`** | Divergent ideation, 2-3 distinct approaches, trade-offs & edge cases | `claude-brainstorm "<requirement>" [context_files...]` |
-| **`codex-brainstorm`** | Engineering feasibility, ecosystem/standard library alternatives & contrarian pass | `codex-brainstorm "<requirement>" [context_files...]` |
-| **`claude-design`** | System architecture, state machines, component API boundaries & research | `claude-design "<requirement>" [context_files...]` |
-| **`claude-refine`** | Spec optimization, JSON Schema refinement & prompt tuning | `claude-refine "<target_file>" "<optimization_goal>"` |
-| **`claude-review`** | Objective Git Diff code review, crash prevention & regression check | `claude-review HEAD "<task_context_description>"` |
-| **`codex-optimize`** | Algorithmic complexity/performance analysis & terminal/CI automation | `codex-optimize "<task_or_requirement>" [context_files...]` |
+| **`claude-brainstorm`** | Divergent ideation, 2-3 distinct approaches, trade-offs & edge cases | `claude-brainstorm [--model <model>] "<requirement>" [context_files...]` |
+| **`codex-brainstorm`** | Engineering feasibility, ecosystem/standard library alternatives & contrarian pass | `codex-brainstorm [--model <model>] "<requirement>" [context_files...]` |
+| **`claude-design`** | System architecture, state machines, component API boundaries & research | `claude-design [--model <model>] "<requirement>" [context_files...]` |
+| **`claude-refine`** | Spec optimization, JSON Schema refinement & prompt tuning | `claude-refine [--model <model>] "<target_file>" "<optimization_goal>"` |
+| **`claude-review`** | Objective Git Diff code review, crash prevention & regression check | `claude-review [--model <model>] [BASE_REF] "<task_context_description>"` |
+| **`codex-optimize`** | Algorithmic complexity/performance analysis & terminal/CI automation | `codex-optimize [--model <model>] "<task_or_requirement>" [context_files...]` |
+
+### 🎛️ Dynamic Model Switching & Sizing
+All scripts support on-the-fly model switching with 3-tier precedence:
+1. **CLI Flag**: `--model <name>` or `-m <name>` (e.g. `claude-brainstorm --model haiku "..."` or `codex-optimize -m o3-mini "..."`)
+2. **Environment Variable**: `CLAUDE_MODEL` for Claude tools, `CODEX_MODEL` for Codex tools, with `AGENT_MODEL` as unified fallback (e.g. `CLAUDE_MODEL=opus claude-design "..."`)
+3. **Default**: When unspecified, automatically uses the underlying CLI tool's default configuration.
+
+This allows Antigravity to autonomously size models to task difficulty — using fast, lightweight models (`haiku`, `o3-mini`) for prompt tuning and quick reviews, while reserving flagship models (`sonnet`, `opus`, `o3`) for complex system architecture and pre-flight audits.
 
 ---
 

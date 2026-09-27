@@ -1,8 +1,53 @@
 #!/usr/bin/env bash
 # Universal Claude Code Review Script with Graceful Fallback
-# Usage: ./claude_review.sh [BASE_REF] [TASK_DESCRIPTION]
+# Usage: ./claude_review.sh [--model <model>] [BASE_REF] [TASK_DESCRIPTION]
 
 set -uo pipefail
+
+MODEL=""
+POSITIONAL_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model|-m)
+      if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
+        MODEL="$2"
+        shift 2
+      else
+        echo "Error: --model requires an argument." >&2
+        exit 1
+      fi
+      ;;
+    --model=*)
+      MODEL="${1#*=}"
+      if [[ -z "$MODEL" ]]; then
+        echo "Error: --model requires an argument." >&2
+        exit 1
+      fi
+      shift
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--model <model>] [BASE_REF] [TASK_DESCRIPTION]"
+      echo "Options:"
+      echo "  -m, --model <model>  Model for Claude CLI (e.g. haiku, sonnet, opus)"
+      echo "                       Env fallback: CLAUDE_MODEL, AGENT_MODEL"
+      exit 0
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
+
+if [ -z "$MODEL" ]; then
+  MODEL="${CLAUDE_MODEL:-${AGENT_MODEL:-}}"
+fi
+
+MODEL_ARGS=()
+if [ -n "$MODEL" ]; then
+  MODEL_ARGS=(--model "$MODEL")
+fi
 
 BASE_REF="${1:-HEAD}"
 TASK_DESC="${2:-No task description provided}"
@@ -26,7 +71,7 @@ if [ -z "$DIFF_OUTPUT" ]; then
   DIFF_OUTPUT=$(git diff HEAD~1 2>/dev/null || git show -p HEAD 2>/dev/null || echo "")
 fi
 
-DIFF_SNIPPET=$(echo "$DIFF_OUTPUT" | head -n 400)
+DIFF_SNIPPET=$(echo "$DIFF_OUTPUT" | head -n 1200)
 
 PROMPT="You are a Principal Code Reviewer and Security Auditor.
 Perform a strict, objective, and actionable code review of the following Git Diff changes.
@@ -57,7 +102,7 @@ Please provide a structured code review report in the following format:
 TEMP_OUTPUT=$(mktemp)
 TEMP_ERR=$(mktemp)
 
-echo "$PROMPT" | claude --safe-mode -p --tools "" > "$TEMP_OUTPUT" 2> "$TEMP_ERR"
+echo "$PROMPT" | claude "${MODEL_ARGS[@]}" --safe-mode -p --tools "" > "$TEMP_OUTPUT" 2> "$TEMP_ERR"
 EXIT_CODE=$?
 
 OUTPUT_STR=$(cat "$TEMP_OUTPUT")

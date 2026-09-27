@@ -1,15 +1,60 @@
 #!/usr/bin/env bash
 # Universal Claude Content / Prompt / Spec Refiner Script with Graceful Fallback
-# Usage: ./claude_refine.sh "<TARGET_FILE>" "<OPTIMIZATION_GOAL>"
+# Usage: ./claude_refine.sh [--model <model>] "<TARGET_FILE>" "<OPTIMIZATION_GOAL>"
 
 set -uo pipefail
+
+MODEL=""
+POSITIONAL_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model|-m)
+      if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
+        MODEL="$2"
+        shift 2
+      else
+        echo "Error: --model requires an argument." >&2
+        exit 1
+      fi
+      ;;
+    --model=*)
+      MODEL="${1#*=}"
+      if [[ -z "$MODEL" ]]; then
+        echo "Error: --model requires an argument." >&2
+        exit 1
+      fi
+      shift
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--model <model>] \"<TARGET_FILE>\" \"<OPTIMIZATION_GOAL>\""
+      echo "Options:"
+      echo "  -m, --model <model>  Model for Claude CLI (e.g. haiku, sonnet, opus)"
+      echo "                       Env fallback: CLAUDE_MODEL, AGENT_MODEL"
+      exit 0
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+set -- "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
+
+if [ -z "$MODEL" ]; then
+  MODEL="${CLAUDE_MODEL:-${AGENT_MODEL:-}}"
+fi
+
+MODEL_ARGS=()
+if [ -n "$MODEL" ]; then
+  MODEL_ARGS=(--model "$MODEL")
+fi
 
 TARGET_FILE="${1:-}"
 GOAL="${2:-}"
 
 if [ -z "$TARGET_FILE" ] || [ -z "$GOAL" ]; then
   echo "Error: Missing arguments." >&2
-  echo "Usage: $0 <TARGET_FILE> \"<OPTIMIZATION_GOAL>\"" >&2
+  echo "Usage: $0 [--model <model>] <TARGET_FILE> \"<OPTIMIZATION_GOAL>\"" >&2
   exit 1
 fi
 
@@ -43,7 +88,7 @@ Please output:
 TEMP_OUTPUT=$(mktemp)
 TEMP_ERR=$(mktemp)
 
-echo "$PROMPT" | claude -p --tools "" > "$TEMP_OUTPUT" 2> "$TEMP_ERR"
+echo "$PROMPT" | claude "${MODEL_ARGS[@]}" -p --tools "" > "$TEMP_OUTPUT" 2> "$TEMP_ERR"
 EXIT_CODE=$?
 
 OUTPUT_STR=$(cat "$TEMP_OUTPUT")
