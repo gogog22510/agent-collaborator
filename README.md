@@ -1,6 +1,6 @@
 # 🤝 Agent Collaborator
 
-> **A Multi-Agent Peer Collaboration & Cross-Verification System orchestrated by Google Antigravity, dispatching specialized external peer agents (Claude CLI, OpenAI Codex, Cursor) with Automatic Graceful Fallback.**
+> **A Multi-Agent Peer Collaboration & Cross-Verification System orchestrated by Google Antigravity, dispatching specialized external peer agents (Claude CLI, OpenAI Codex) with Automatic Graceful Fallback.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Orchestrator: Antigravity](https://img.shields.io/badge/Orchestrator-Antigravity-4285F4.svg)](#-architecture-antigravity-as-the-central-orchestrator)
@@ -53,12 +53,14 @@ Once installed, you can use these tools directly in any terminal or allow Antigr
 
 | Command / Script | Purpose | Usage Example |
 | :--- | :--- | :--- |
-| **`claude-brainstorm`** | Divergent ideation, 2-3 distinct approaches, trade-offs & edge cases | `claude-brainstorm [--model <model>] "<requirement>" [context_files...]` |
-| **`codex-brainstorm`** | Engineering feasibility, ecosystem/standard library alternatives & contrarian pass | `codex-brainstorm [--model <model>] "<requirement>" [context_files...]` |
-| **`claude-design`** | System architecture, state machines, component API boundaries & research | `claude-design [--model <model>] "<requirement>" [context_files...]` |
-| **`claude-refine`** | Spec optimization, JSON Schema refinement & prompt tuning | `claude-refine [--model <model>] "<target_file>" "<optimization_goal>"` |
-| **`claude-review`** | Objective Git Diff code review, crash prevention & regression check | `claude-review [--model <model>] [BASE_REF] "<task_context_description>"` |
-| **`codex-optimize`** | Algorithmic complexity/performance analysis & terminal/CI automation | `codex-optimize [--model <model>] "<task_or_requirement>" [context_files...]` |
+| **`claude-brainstorm`** | Divergent ideation, 2-3 distinct approaches, trade-offs & edge cases | `claude-brainstorm [--model <model>] [-c] "<requirement>" [context_files...]` |
+| **`codex-brainstorm`** | Engineering feasibility, ecosystem/standard library alternatives & contrarian pass | `codex-brainstorm [--model <model>] [-c] "<requirement>" [context_files...]` |
+| **`claude-design`** | System architecture, state machines, component API boundaries & research | `claude-design [--model <model>] [-c] "<requirement>" [context_files...]` |
+| **`claude-refine`** | Spec optimization, JSON Schema refinement & prompt tuning (accepts reference files) | `claude-refine [--model <model>] [-c] "<target_file>" "<optimization_goal>" [ref_files...]` |
+| **`claude-review`** | Objective Git Diff code review, crash prevention & regression check | `claude-review [--model <model>] [-c] [BASE_REF] "<task_context_description>"` |
+| **`claude-followup`** | Multi-turn session continuation, iterating on previous Claude discussion | `claude-followup [--model <model>] "<prompt>" [context_files...]` |
+| **`codex-followup`** | Multi-turn session continuation, resuming latest Codex session | `codex-followup [--model <model>] "<prompt>" [context_files...]` |
+| **`codex-optimize`** | Algorithmic complexity/performance analysis & terminal/CI automation | `codex-optimize [--model <model>] [-c] "<task_or_requirement>" [context_files...]` |
 
 ### 🎛️ Dynamic Model Switching & Sizing
 All scripts support on-the-fly model switching with 3-tier precedence:
@@ -67,6 +69,11 @@ All scripts support on-the-fly model switching with 3-tier precedence:
 3. **Default**: When unspecified, automatically uses the underlying CLI tool's default configuration.
 
 This allows Antigravity to autonomously size models to task difficulty — using fast, lightweight models (`haiku`, `o3-mini`) for prompt tuning and quick reviews, while reserving flagship models (`sonnet`, `opus`, `o3`) for complex system architecture and pre-flight audits.
+
+### 🔄 Multi-Turn Collaboration & Memory Anti-Hallucination Protocol
+External peer agent CLIs are **stateless by default**. Orchestrators must never run raw stateless commands referencing phantom context (e.g. `claude -p "Based on the earlier review findings..."`).
+- **In-Agent Continuity (Same Agent)**: When continuing an active discussion in the workspace, use `claude-followup` / `codex-followup` or add `-c` / `--continue` to continue the most recent session (avoid concurrent invocations in the same cwd).
+- **Cross-Agent Synthesis (Codex notes + Claude review -> Final Spec)**: Claude and Codex do not share session storage! For cross-agent workflows, always use **Explicit Context Piping**: pass reference files directly into `claude-refine <target> "<goal>" [ref_files...]` or context files to `claude-design`.
 
 ---
 
@@ -129,10 +136,6 @@ If installing manually:
   ```text
   /plugin install superpowers@claude-plugins-official
   ```
-* **Cursor**:
-  ```text
-  /add-plugin superpowers
-  ```
 
 ---
 
@@ -190,14 +193,17 @@ flowchart TD
         CR["claude-refine<br/>(Spec & Prompt Refinement)"]
         CW["claude-review<br/>(Strict Git Diff Code Review)"]
         CO["codex-optimize<br/>(Perf/Algorithmic & Terminal Automation)"]
+        CF["claude-followup / codex-followup<br/>(Multi-Turn Session Continuation)"]
     end
 
     B -.->|Ideation Pass| CB
     B -.->|Feasibility Pass| XB
     B -.->|Architecture Pass| CD
     P -.->|Antigravity Dispatches Refinement| CR
+    P -.->|Session Follow-up & Iteration| CF
     T -.->|Antigravity Dispatches Pre-flight Review| CW
     T -.->|Antigravity Dispatches Perf/Automation Pass| CO
+    T -.->|Session Follow-up & Iteration| CF
     CW --> V
     CO --> V
 ```
@@ -208,7 +214,6 @@ flowchart TD
 
 Ready-to-use integration contracts are available in the `templates/` directory:
 * ⚡ **Superpowers / Antigravity**: [`templates/antigravity_superpowers.md`](templates/antigravity_superpowers.md) (Add to `.agent/AGENTS.md`)
-* 🖱️ **Cursor / Windsurf**: [`templates/cursor_rules.md`](templates/cursor_rules.md) (Add to `.cursorrules`)
 * 🤖 **Claude Code**: [`templates/claude_code.md`](templates/claude_code.md) (Add to `CLAUDE.md`)
 
 ---
@@ -216,9 +221,12 @@ Ready-to-use integration contracts are available in the `templates/` directory:
 ## 🛡️ Graceful Self-Healing Fallback
 
 ### Antigravity Sandbox Handling
-External peer agent tools (`claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require outbound internet access to the Claude API.
+External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`) execute host binaries (`~/.local/bin/claude`, `~/.local/bin/codex`) and require outbound internet access to the model APIs.
 - **`BypassSandbox: true` Requirement**: When Antigravity calls these tools via `run_command`, it must set `BypassSandbox: true`.
-- **Sandbox Isolation Error (Exit 126)**: If the command is mistakenly executed inside standard sandbox mode, it returns `❌ [SANDBOX_BLOCKED] (Exit: 126)`. The orchestrator will NOT fall back, and will immediately re-run with `BypassSandbox: true`.
+- **Sandbox Isolation Error (Exit 126)**: If the command is mistakenly executed inside standard sandbox mode, it returns `❌ [SANDBOX_BLOCKED] (Exit: 126)`. The orchestrator will re-run once with `BypassSandbox: true` (falling back to internal reasoning if 126 persists to prevent loops).
+
+### Caller Input & Session Error (Exit 1)
+If a command exits with code 1 (missing arguments, specified context file not found, or no previous session found to continue), it indicates a caller input issue, NOT an external API outage. The orchestrator corrects arguments, verifies file paths, or invokes without `-c`, rather than falling back.
 
 ### True API Limit / Outage Fallback (Exit 100)
 When an external peer agent encounters:

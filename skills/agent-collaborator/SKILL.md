@@ -31,62 +31,86 @@ Scripts auto-detect the current project type (`pubspec.yaml`, `package.json`, `C
 
 They are globally available at: `~/.gemini/config/skills/agent-collaborator/scripts/` (or locally at `.agent/skills/agent-collaborator/scripts/` or standalone in `~/.local/bin/`).
 
-> ⚠️ **Antigravity Sandbox Requirement**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require outbound internet access to the Claude API. In Antigravity, you **MUST** run them using `run_command` with `BypassSandbox: true`. Do NOT run them in standard sandbox mode.
+> ⚠️ **Antigravity Sandbox Requirement**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`) execute host binaries (`~/.local/bin/claude`, `~/.local/bin/codex`) and require outbound internet access to the model APIs. In Antigravity, you **MUST** run them using `run_command` with `BypassSandbox: true`. Do NOT run them in standard sandbox mode.
 
-### Dynamic Model Switching
-All scripts support dynamic model switching with 3-tier precedence:
-1. **CLI Flag**: `--model <model>` or `-m <model>` (e.g. `--model haiku`, `--model opus`, `-m o3-mini`)
-2. **Environment Variable**: `CLAUDE_MODEL` (for Claude) or `CODEX_MODEL` (for Codex), with `AGENT_MODEL` as unified fallback.
-3. **Default**: When unspecified, uses the CLI tool's default configured model.
+### Dynamic Model Switching & Multi-Turn Session Continuation
+All scripts support:
+1. **Dynamic Model Switching**: `--model <model>` or `-m <model>` (CLI Flag > `CLAUDE_MODEL`/`CODEX_MODEL` > `AGENT_MODEL` > Default).
+2. **Session Continuation**: `-c` or `--continue` to continue the previous conversation session in the current directory (`claude -c -p` / `codex exec resume --last`).
+3. **Artifact / Context Chaining**: Pass reference files directly into commands (e.g. `claude-refine <target> "<goal>" [ref_files...]`).
 
 ### 1. Divergent Brainstorming & Ideation (Claude)
 ```bash
-claude-brainstorm [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+claude-brainstorm [--model <model>] [-c|--continue] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh [--model <model>] [-c|--continue] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
 # Example with fast model: claude-brainstorm --model haiku "Simple state transition"
 ```
 
 ### 2. Engineering Feasibility & Contrarian Brainstorming (Codex)
 ```bash
-codex-brainstorm [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+codex-brainstorm [--model <model>] [-c|--continue] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh [--model <model>] [-c|--continue] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
 # Example: CODEX_MODEL=o3-mini codex-brainstorm "Concurrency memory model"
 ```
 
 ### 3. Architecture & Solution Design
 ```bash
-claude-design [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+claude-design [--model <model>] [-c|--continue] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh [--model <model>] [-c|--continue] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
 # Example with flagship model: claude-design --model opus "Distributed cache state machine"
 ```
 
 ### 4. Universal Code Review
 ```bash
-claude-review [--model <model>] [BASE_GIT_REF] "<TASK_DESCRIPTION>"
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh [--model <model>] [BASE_GIT_REF] "<TASK_DESCRIPTION>"
+claude-review [--model <model>] [-c|--continue] [BASE_GIT_REF] "<TASK_DESCRIPTION>"
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh [--model <model>] [-c|--continue] [BASE_GIT_REF] "<TASK_DESCRIPTION>"
 # Example: claude-review --model sonnet HEAD "Pre-flight security and regression audit"
 ```
 
-### 5. Prompt & Spec Refinement
+### 5. Prompt & Spec Refinement (with Reference Context Injection)
 ```bash
-claude-refine [--model <model>] "<FILE_PATH>" "<OPTIMIZATION_GOAL>"
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh [--model <model>] "<FILE_PATH>" "<OPTIMIZATION_GOAL>"
-# Example: CLAUDE_MODEL=haiku claude-refine schema.json "Tighten validation regexes"
+claude-refine [--model <model>] [-c|--continue] "<FILE_PATH>" "<OPTIMIZATION_GOAL>" [REFERENCE_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh [--model <model>] [-c|--continue] "<FILE_PATH>" "<OPTIMIZATION_GOAL>" [REFERENCE_FILES...]
+# Example with review findings: claude-refine docs/plan.md "Rewrite per review" review_findings.md
 ```
 
 ### 6. Algorithmic / Performance / Terminal Automation (Codex)
 ```bash
-codex-optimize [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
-# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh [--model <model>] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+codex-optimize [--model <model>] [-c|--continue] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh [--model <model>] [-c|--continue] "<TASK_OR_REQUIREMENT>" [CONTEXT_FILES...]
 # Example: codex-optimize -m o3-mini "Vector search cosine similarity loop"
 ```
+
+### 7. Multi-Turn Session Follow-ups (Claude & Codex)
+When you need to follow up, iterate, or ask the peer agent to produce a full artifact based on earlier discussion in the current directory:
+```bash
+# Claude session follow-up (continues last session with claude -c -p):
+claude-followup [--model <model>] "<FOLLOWUP_PROMPT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_followup.sh [--model <model>] "<FOLLOWUP_PROMPT>" [CONTEXT_FILES...]
+
+# Codex session follow-up (continues last session with codex exec --sandbox read-only resume --last):
+codex-followup [--model <model>] "<FOLLOWUP_PROMPT>" [CONTEXT_FILES...]
+# or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_followup.sh [--model <model>] "<FOLLOWUP_PROMPT>" [CONTEXT_FILES...]
+```
+
+## 🔄 Multi-Turn Collaboration & Memory Anti-Hallucination Protocol
+
+External peer agent CLIs are **stateless by default**. Orchestrators MUST NOT assume a bare `claude -p "Based on earlier findings..."` knows previous turns!
+
+To handle multi-turn collaboration correctly:
+1. **In-Agent Follow-ups (Same Agent)**:
+   - Use `claude-followup`, `codex-followup`, or add `-c` / `--continue` to continue the most recent conversation session in the directory.
+   - *Concurrency Note*: Targets the most recent session in cwd; avoid parallel background tasks in the same cwd if relying on session continuation.
+2. **Cross-Agent Synthesis (Codex findings + Claude review -> Final Design)**:
+   - Different models do NOT share sessions! Codex cannot read Claude's memory, and vice-versa.
+   - Always use **Explicit Context Piping**: save intermediate findings or pass reference files directly into `claude-refine <target> "<goal>" [ref_files...]`.
 
 ## Asynchronous Execution & Anti-Premature Completion Protocol
 
 Because Claude CLI and Codex perform deep LLM reasoning, commands typically take 15–30 seconds, exceeding Antigravity's maximum synchronous wait limit (10,000ms) and running as **background tasks**.
 
 ### 🛑 CRITICAL: Do NOT Prematurely Finalize Milestones
-When a peer agent command (`claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-review`, `claude-refine`, `codex-optimize`) is sent to the background:
+When a peer agent command (`claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-review`, `claude-refine`, `claude-followup`, `codex-followup`, `codex-optimize`) is sent to the background:
 1. **The milestone is NOT complete**: You **MUST NOT** write a final `implementation_plan.md`, declare "設計已完成" (design completed) or "審查通過" (review passed), or invite the user to proceed. Doing so invalidates the peer collaboration.
 2. **End Your Turn & Wait**:
    - Briefly notify the user (e.g. *"已啟動 `claude-design` 進行架構諮詢，正在等待 Claude 分析反饋以整合至設計計畫中..."*).
@@ -101,11 +125,16 @@ When a peer agent command (`claude-brainstorm`, `codex-brainstorm`, `claude-desi
 
 ### 1. Sandbox Permissions (Exit 126 / "Operation not permitted")
 - If a command fails with Exit 126, `Operation not permitted`, or outputs `❌ [SANDBOX_BLOCKED]`, this is a sandbox restriction error, **NOT** an API exhaustion or unavailable peer agent.
-- **DO NOT** trigger fallback to internal reasoning.
-- **ACTION**: Immediately re-run the command with `BypassSandbox: true` in `run_command`.
+- **ACTION**: Re-run the command once with `BypassSandbox: true` in `run_command` (if 126 persists, fallback to internal reasoning to prevent infinite loops).
 
 ### 2. Graceful Fallback Protocol (Exit Code 100)
 - Only when the script outputs `⚠️ [FALLBACK_TRIGGERED: ...]` or exits with `100` (due to actual API rate limits, quota exhaustion, or service outage):
   1. Log a non-blocking notice: *"External peer agent unavailable. Seamlessly switching to internal reasoning for this phase."*
   2. Antigravity immediately executes the Design, Review, Prompt Refinement, or Optimization task itself using its own model reasoning.
   3. The workflow never blocks or fails due to external API limits.
+
+### 3. Caller / Argument Errors (Exit Code 1)
+- If a script exits with `1` (missing required arguments, specified context file not found, or no prior session found to resume):
+- This is a caller-side input error, **NOT** an external API outage.
+- **DO NOT** trigger fallback to internal reasoning.
+- **ACTION**: Correct the command arguments, verify file paths, or invoke a fresh session without `-c` / `--continue`.

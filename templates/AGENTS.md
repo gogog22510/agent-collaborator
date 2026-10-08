@@ -24,24 +24,26 @@
 
 - **Peer Advisory Council (External Specialized Agents)**:
   - **Claude CLI (`agent-collaborator`)**:
-    - *Ideation & Approach Trade-offs*: `claude-brainstorm [--model <model>] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`)
-    - *System Architecture & State Machines*: `claude-design [--model <model>] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`)
-    - *Spec, Schema & Prompt Refinement*: `claude-refine [--model <model>] "<target_file>" "<goal>"` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`)
-    - *Pre-flight Git Diff Code Review*: `claude-review [--model <model>] [BASE_REF] "<task_description>"` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`)
+    - *Ideation & Approach Trade-offs*: `claude-brainstorm [--model <model>] [-c] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`)
+    - *System Architecture & State Machines*: `claude-design [--model <model>] [-c] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`)
+    - *Spec, Schema & Prompt Refinement*: `claude-refine [--model <model>] [-c] "<target_file>" "<goal>" [ref_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`)
+    - *Pre-flight Git Diff Code Review*: `claude-review [--model <model>] [-c] [BASE_REF] "<task_description>"` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`)
+    - *Session Follow-up & Iteration*: `claude-followup [--model <model>] "<followup_prompt>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_followup.sh`)
   - **OpenAI Codex (`agent-collaborator`)**:
-    - *Engineering Feasibility & Contrarian Ideation*: `codex-brainstorm [--model <model>] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`)
-    - *Algorithmic, Performance & Terminal/CI Automation*: `codex-optimize [--model <model>] "<task_or_requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`)
+    - *Engineering Feasibility & Contrarian Ideation*: `codex-brainstorm [--model <model>] [-c] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`)
+    - *Algorithmic, Performance & Terminal/CI Automation*: `codex-optimize [--model <model>] [-c] "<task_or_requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`)
+    - *Session Follow-up & Iteration*: `codex-followup [--model <model>] "<followup_prompt>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_followup.sh`)
     - *Cross-Model Second Opinion*: Consult Codex when architecture or review trade-offs from Claude require a contrasting perspective.
     - *Computer Use (GUI verification)*: Codex's screen-driven mouse/keyboard control is only available via the **Codex desktop/ChatGPT app**, not this headless CLI script. If a task needs actual GUI interaction (verifying a UI in a browser/Figma/Xcode/Slack), say so explicitly and route it to a human or the Codex app — do not assume `codex-optimize` can do it.
   - **Model Selection & Sizing**:
     - All peer agent commands support dynamic model specification via `--model <name>` / `-m <name>` or environment variables (`CLAUDE_MODEL`, `CODEX_MODEL`, `AGENT_MODEL`).
     - The Orchestrator (Antigravity) can select faster/cost-effective models (e.g. `haiku`, `o3-mini`) for lightweight tasks or top-tier models (e.g. `opus`, `sonnet`, `o3`) for critical architectural design and security reviews.
-  - **Other Specialized Peer Agents (Extensible)**: see Section 4 below.
+  - **Other Specialized Peer Agents (Extensible)**: see Section 5 below.
 
 > **Execution Notes by Driver Platform**:
 > 1. **Antigravity (Gemini as Central Orchestrator)**:
->    - **Sandbox Bypass**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require internet access to Claude API. You **MUST** execute them using `run_command` with `BypassSandbox: true`. Do NOT execute in standard sandbox mode.
->    - **Direct Invocation**: Directly invoke `claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use the explicit absolute path `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
+>    - **Sandbox Bypass**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`) execute host binaries (`~/.local/bin/claude`, `~/.local/bin/codex`) and require internet access. You **MUST** execute them using `run_command` with `BypassSandbox: true`. Do NOT execute in standard sandbox mode.
+>    - **Direct Invocation**: Directly invoke `claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-followup`, or `codex-optimize` (in `~/.local/bin` on PATH) or use the explicit absolute path `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
 >    - **Sandbox Error Handling**: If an execution ever fails with Exit 126, "Operation not permitted", or outputs `❌ [SANDBOX_BLOCKED]`, it indicates standard sandbox mode blocked the host binary. Immediately re-run with `BypassSandbox: true`. DO NOT trigger fallback for sandbox errors.
 > 2. **Claude Code CLI (`claude` as Central Orchestrator)**:
 >    - When running directly in Claude Code CLI, Claude is the primary orchestrator! It executes Superpowers skills directly (`superpowers:brainstorming`, `superpowers:systematic-debugging`, etc.).
@@ -82,7 +84,20 @@ Because external peer agent CLIs perform deep LLM reasoning, commands typically 
 
 ---
 
-## 4. Extensibility: Adding New Peer Agents (e.g., Custom/Local CLIs)
+## 4. Multi-Turn Collaboration & Memory Anti-Hallucination Protocol
+
+External peer agent CLIs are **stateless by default**. The Orchestrator MUST NOT invoke raw stateless commands referencing phantom context (e.g. `claude -p "Based on the earlier review findings..."`) without passing continuity or context files!
+
+1. **In-Agent Continuity (Same Agent)**:
+   - When iterating with the same model across multiple turns in the current directory, use `claude-followup` / `codex-followup` or add `-c` / `--continue` to continue the most recent session.
+   - *Note on Concurrency*: Session continuation targets the most recently modified session in the working directory; avoid running concurrent tasks in the same cwd if relying on `-c`.
+2. **Cross-Agent Synthesis (Codex findings + Claude review -> Final Document)**:
+   - Different models do NOT share session storage. Claude cannot access Codex sessions and vice-versa.
+   - For cross-model workflows, always use **Explicit Context Piping**: save review/brainstorm output or pass reference files directly into `claude-refine <target> "<goal>" [ref_files...]` or context files to `claude-design`.
+
+---
+
+## 5. Extensibility: Adding New Peer Agents (e.g., Custom/Local CLIs)
 
 To extend this workflow with additional external models beyond Claude CLI and Codex (e.g. local LLMs, other vendor CLIs):
 
@@ -94,10 +109,11 @@ To extend this workflow with additional external models beyond Claude CLI and Co
 
 ---
 
-## 5. Graceful Self-Healing Fallback Protocol
+## 6. Graceful Self-Healing Fallback Protocol
 
-- **Sandbox Block vs. API Exhaustion Distinction**:
-  - If a script exits with `126`, outputs `Operation not permitted`, or outputs `❌ [SANDBOX_BLOCKED]`: Re-run immediately with `BypassSandbox: true`. Do NOT trigger fallback.
+- **Sandbox Block vs. API Exhaustion vs. Input Error Distinction**:
+  - If a script exits with `126`, outputs `Operation not permitted`, or outputs `❌ [SANDBOX_BLOCKED]`: Re-run once with `BypassSandbox: true`. If 126 persists after one re-run, switch to internal reasoning fallback to prevent infinite retry loops.
+  - If a script exits with `1` (missing arguments, missing files, or no recorded session to resume): This is a caller input error, NOT an API outage. Fix arguments or invoke without `-c`. Do NOT trigger fallback.
   - Only when an external peer agent CLI encounters API exhaustion, rate limits (429), or connectivity timeouts (exit code 100):
     1. The script will emit `⚠️ [FALLBACK_TRIGGERED: ...]` and exit with code `100`.
     2. The Orchestrator (Antigravity) will output a non-blocking log:

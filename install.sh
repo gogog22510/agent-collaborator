@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Universal Modular Installer for agent-collaborator (Claude / Codex / Cursor)
+# Universal Modular Installer for agent-collaborator (Claude / Codex)
 # ==============================================================================
 
 set -euo pipefail
@@ -30,18 +30,22 @@ install_cli() {
   ln -sf "$SKILL_SRC/scripts/claude_design.sh" "$BIN_DIR/claude-design"
   ln -sf "$SKILL_SRC/scripts/claude_review.sh" "$BIN_DIR/claude-review"
   ln -sf "$SKILL_SRC/scripts/claude_refine.sh" "$BIN_DIR/claude-refine"
+  ln -sf "$SKILL_SRC/scripts/claude_followup.sh" "$BIN_DIR/claude-followup"
   ln -sf "$SKILL_SRC/scripts/codex_brainstorm.sh" "$BIN_DIR/codex-brainstorm"
   ln -sf "$SKILL_SRC/scripts/codex_optimize.sh" "$BIN_DIR/codex-optimize"
+  ln -sf "$SKILL_SRC/scripts/codex_followup.sh" "$BIN_DIR/codex-followup"
   rm -f "$BIN_DIR/claude-prompt-tune" 2>/dev/null || true
 
-  chmod +x "$BIN_DIR/claude-brainstorm" "$BIN_DIR/claude-design" "$BIN_DIR/claude-review" "$BIN_DIR/claude-refine" "$BIN_DIR/codex-brainstorm" "$BIN_DIR/codex-optimize"
+  chmod +x "$BIN_DIR/claude-brainstorm" "$BIN_DIR/claude-design" "$BIN_DIR/claude-review" "$BIN_DIR/claude-refine" "$BIN_DIR/claude-followup" "$BIN_DIR/codex-brainstorm" "$BIN_DIR/codex-optimize" "$BIN_DIR/codex-followup"
   echo -e "${GREEN}✓ CLI tools linked:${NC}"
   echo "    - $BIN_DIR/claude-brainstorm"
   echo "    - $BIN_DIR/claude-design"
   echo "    - $BIN_DIR/claude-review"
   echo "    - $BIN_DIR/claude-refine"
+  echo "    - $BIN_DIR/claude-followup"
   echo "    - $BIN_DIR/codex-brainstorm"
   echo "    - $BIN_DIR/codex-optimize"
+  echo "    - $BIN_DIR/codex-followup"
   if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo -e "${YELLOW}  ⚠ Note: Ensure $BIN_DIR is in your PATH in ~/.zshrc or ~/.bashrc${NC}"
   fi
@@ -297,7 +301,6 @@ install_superpowers() {
     echo "    Antigravity: agy plugin install https://github.com/obra/superpowers"
     echo "                 (or clone into ~/.gemini/config/plugins/superpowers)"
     echo "    Claude Code: /plugin install superpowers@claude-plugins-official"
-    echo "    Cursor:      /add-plugin superpowers"
   fi
 }
 

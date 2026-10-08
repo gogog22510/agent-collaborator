@@ -1,6 +1,6 @@
 # 🤝 Agent Collaborator (多代理人協同架構 Skill & CLI)
 
-> **以 Antigravity 作為總指揮核心（Central Orchestrator），調度 Claude CLI / Codex / Cursor 外部專家的多代理人深度協作與交叉驗證系統。**
+> **以 Antigravity 作為總指揮核心（Central Orchestrator），調度 Claude CLI / OpenAI Codex 外部專家的多代理人深度協作與交叉驗證系統。**
 > 具備自動優雅降級（Graceful Fallback）、模組化安裝與 Superpowers 工作流無縫整合。
 
 [English Documentation](README.md)
@@ -49,12 +49,14 @@ flowchart TD
 
 | 指令 / 腳本 | 用途 | 使用範例 |
 | :--- | :--- | :--- |
-| **`claude-brainstorm`** | 發散式頭腦風暴、2-3 種架構方案對照、邊界風險與權衡評估 | `claude-brainstorm [--model <model>] "<需求描述>" [上下文檔案...]` |
-| **`codex-brainstorm`** | 工程可行性分析、標準庫/生態替代方案、極簡可行架構與反向思考 | `codex-brainstorm [--model <model>] "<需求描述>" [上下文檔案...]` |
-| **`claude-design`** | 系統架構、狀態機、組件邊界與深度技術規格設計 | `claude-design [--model <model>] "<需求描述>" [上下文檔案...]` |
-| **`claude-refine`** | Prompt、JSON Schema、規格文件專項精煉優化 | `claude-refine [--model <model>] "<目標檔案>" "<優化目標>"` |
-| **`claude-review`** | Git Diff 審查、防範 Crash、邏輯漏洞與回歸風險 | `claude-review [--model <model>] [BASE_REF] "<任務背景描述>"` |
-| **`codex-optimize`** | 演算法複雜度/效能瓶頸分析、終端機與 CI 自動化 | `codex-optimize [--model <model>] "<任務或需求>" [上下文檔案...]` |
+| **`claude-brainstorm`** | 發散式頭腦風暴、2-3 種架構方案對照、邊界風險與權衡評估 | `claude-brainstorm [--model <model>] [-c] "<需求描述>" [上下文檔案...]` |
+| **`codex-brainstorm`** | 工程可行性分析、標準庫/生態替代方案、極簡可行架構與反向思考 | `codex-brainstorm [--model <model>] [-c] "<需求描述>" [上下文檔案...]` |
+| **`claude-design`** | 系統架構、狀態機、組件邊界與深度技術規格設計 | `claude-design [--model <model>] [-c] "<需求描述>" [上下文檔案...]` |
+| **`claude-refine`** | Prompt、JSON Schema、規格文件專項精煉優化（可注入參考檔案） | `claude-refine [--model <model>] [-c] "<目標檔案>" "<優化目標>" [參考檔案...]` |
+| **`claude-review`** | Git Diff 審查、防範 Crash、邏輯漏洞與回歸風險 | `claude-review [--model <model>] [-c] [BASE_REF] "<任務背景描述>"` |
+| **`claude-followup`** | 多輪會話接續，沿用當前目錄的 Claude 既有對話上下文 | `claude-followup [--model <model>] "<追問或生成指令>" [上下文檔案...]` |
+| **`codex-followup`** | 多輪會話接續，恢復當前目錄的最新 Codex 會話 (`resume --last`) | `codex-followup [--model <model>] "<追問或生成指令>" [上下文檔案...]` |
+| **`codex-optimize`** | 演算法複雜度/效能瓶頸分析、終端機與 CI 自動化 | `codex-optimize [--model <model>] [-c] "<任務或需求>" [上下文檔案...]` |
 
 ### 🎛️ 動態模型切換與任務分級
 所有腳本皆支援即時切換模型，具備三層優先級規則：
@@ -63,6 +65,11 @@ flowchart TD
 3. **原生預設（無指定）**：直接沿用底層 `claude` 或 `codex` CLI 目前配置的預設模型。
 
 這讓 Antigravity 可以自主依任務複雜度分級調度：小型 Prompt 調整與簡易審查調用輕快省 Token 的模型（如 `haiku`、`o3-mini`），而關鍵系統架構與上線前安全審核則使用頂級旗艦模型（如 `sonnet`、`opus`、`o3`）。
+
+### 🔄 多輪協作延續與記憶防幻覺規範 (Multi-Turn Collaboration Protocol)
+外部 Peer Agent CLI **預設為無狀態 (Stateless)**！總指揮嚴格禁止在沒有延續上下文的情況下，發起如 `claude -p "依據剛才的 Review 結論..."` 這類憑空預設模型記得前言的指令。
+- **同模型多輪延續 (In-Agent Continuity)**：需在當前目錄繼續討論或生成文件時，使用 `claude-followup` / `codex-followup`，或在既有工具附加 `-c` / `--continue`。
+- **跨模型成果匯整 (Cross-Agent Context Piping)**：Claude 與 Codex 的 Session 完全獨立不互通！跨模型協同（例如匯總 Codex 筆記與 Claude 審查以生成最終設計）時，**必須**使用顯式檔案注入，直接將參考成果傳入 `claude-refine <目標> "<目標描述>" [參考檔案...]` 或 `claude-design` 的上下文參數。
 
 ---
 
@@ -125,10 +132,6 @@ Agent Collaborator 具備**自適應雙模態相容設計**：
   ```text
   /plugin install superpowers@claude-plugins-official
   ```
-* **Cursor**：
-  ```text
-  /add-plugin superpowers
-  ```
 
 ---
 
@@ -187,14 +190,17 @@ flowchart TD
         CR["claude-refine<br/>(規格與 Prompt 精煉)"]
         CW["claude-review<br/>(Git Diff 嚴格代碼審查)"]
         CO["codex-optimize<br/>(效能/演算法與終端機自動化)"]
+        CF["claude-followup / codex-followup<br/>(多輪會話延續)"]
     end
 
     B -.->|發散思維諮詢| CB
     B -.->|工程可行性諮詢| XB
     B -.->|架構設計諮詢| CD
     P -.->|Antigravity 調度精煉| CR
+    P -.->|多輪會話延續| CF
     T -.->|Antigravity 調度審查| CW
     T -.->|Antigravity 調度效能/自動化分析| CO
+    T -.->|多輪會話延續| CF
     CW --> V
     CO --> V
 ```
@@ -205,7 +211,6 @@ flowchart TD
 
 詳細配置指引請參閱 `templates/` 目錄：
 * ⚡ **Superpowers / Antigravity 整合**：[`templates/antigravity_superpowers.md`](templates/antigravity_superpowers.md)
-* 🖱️ **Cursor / Windsurf 整合**：[`templates/cursor_rules.md`](templates/cursor_rules.md)
 * 🤖 **Claude Code 整合**：[`templates/claude_code.md`](templates/claude_code.md)
 
 ---
@@ -213,9 +218,12 @@ flowchart TD
 ## 🛡️ 自動優雅降級機制 (Graceful Self-Healing Fallback)
 
 ### Antigravity 沙盒環境注意 (Sandbox Handling)
-外部 Peer Agent 工具 (`claude-design`, `claude-refine`, `claude-review`) 需調用 Host 端本機二進位執行檔 (`~/.local/bin/claude`) 以及連線至 Anthropic 外部 API：
+外部 Peer Agent 工具 (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`) 需調用 Host 端本機二進位執行檔 (`~/.local/bin/claude`, `~/.local/bin/codex`) 以及連線至外部 API：
 - **`BypassSandbox: true` 必備**：在 Antigravity 透過 `run_command` 調用外部 Agent 時，必須加上 `BypassSandbox: true`。
-- **沙盒權限阻擋 (Exit 126)**：若在預設 Sandbox 內執行，會返回 `❌ [SANDBOX_BLOCKED] (Exit: 126)`。指揮官將**不會**觸發降級，而是立即補上 `BypassSandbox: true` 重新執行。
+- **沙盒權限阻擋 (Exit 126)**：若在預設 Sandbox 內執行，會返回 `❌ [SANDBOX_BLOCKED] (Exit: 126)`。指揮官將補上 `BypassSandbox: true` 重新嘗試一次（若依然失敗則轉為內部推理降級，避免無限重試循環）。
+
+### 調用端參數與對話狀態錯誤 (Exit 1)
+若腳本返回 Exit Code `1`（缺少必要參數、指定上下文檔案不存在、或找不到可接續的歷史對話）：代表調用端輸入問題，**並非**外部 API 故障。指揮官應修正參數、檢查檔案路徑、或以全新對話（不帶 `-c`）執行，**不得**誤觸發降級。
 
 ### 真正的 API 額度 / 斷線降級 (Exit 100)
 當外部 Agent 遇到 API 額度用盡 (Usage Limit)、Rate Limit (429) 或連線超載 (529) 時，腳本會自動輸出 `⚠️ [FALLBACK_TRIGGERED: ...]`（Exit Code: `100`），總指揮（Antigravity）會無縫接管架構或審查工作，**絕不中斷任務流水線**。

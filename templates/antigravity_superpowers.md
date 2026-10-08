@@ -31,12 +31,6 @@ Or add the community marketplace:
 /plugin install superpowers@superpowers-marketplace
 ```
 
-### 🖱️ Cursor
-In Cursor Agent chat:
-```text
-/add-plugin superpowers
-```
-
 ---
 
 ## 3. Injecting Agent Collaborator into the Superpowers Workflow
@@ -56,26 +50,30 @@ Since Superpowers/Antigravity are driven by your project's `AGENTS.md`, `--proje
 ## 1. Roles & Division of Labor
 - **Central Orchestrator (Antigravity / Gemini)**: Full context awareness, toolchain execution, TDD implementation, and fallback.
 - **Peer Advisory Council (Claude CLI / OpenAI Codex / Custom)**:
-  - `claude-brainstorm [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`): Ideation & approach trade-offs (2-3 distinct approaches)
-  - `codex-brainstorm [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`): Engineering feasibility, standard library alternatives & contrarian perspectives
-  - `claude-design [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`): Architectural design & state-machine exploration
-  - `claude-refine [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`): Spec & prompt optimization
-  - `claude-review [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`): Pre-flight git diff code review
-  - `codex-optimize [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`): Algorithmic/performance analysis & terminal/CI automation, using Codex's actual strengths (Terminal-Bench-leading agentic shell tasks, cheaper per-task on high-volume work). Codex's **Computer Use** (GUI screen/mouse/keyboard control) only exists in the Codex desktop app, not this headless script — route GUI-verification needs there.
+  - `claude-brainstorm [--model <model>] [-c]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`): Ideation & approach trade-offs (2-3 distinct approaches)
+  - `codex-brainstorm [--model <model>] [-c]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`): Engineering feasibility, standard library alternatives & contrarian perspectives
+  - `claude-design [--model <model>] [-c]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`): Architectural design & state-machine exploration
+  - `claude-refine [--model <model>] [-c]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`): Spec & prompt optimization (accepts reference files)
+  - `claude-review [--model <model>] [-c]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh`): Pre-flight git diff code review
+  - `claude-followup [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_followup.sh`): Multi-turn session continuation for Claude
+  - `codex-followup [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_followup.sh`): Multi-turn session continuation for Codex
+  - `codex-optimize [--model <model>] [-c]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`): Algorithmic/performance analysis & terminal/CI automation, using Codex's actual strengths (Terminal-Bench-leading agentic shell tasks, cheaper per-task on high-volume work). Codex's **Computer Use** (GUI screen/mouse/keyboard control) only exists in the Codex desktop app, not this headless script — route GUI-verification needs there.
   - *Model Selection*: All commands support `--model <name>` / `-m <name>` or environment variables (`CLAUDE_MODEL`, `CODEX_MODEL`, `AGENT_MODEL`). Antigravity can choose fast models (`haiku`, `o3-mini`) for lightweight tasks or top models (`opus`, `sonnet`, `o3`) for deep architectures.
   - *(Extensible: Add other custom peer agent scripts under `.agent/skills/` or `~/.local/bin/`)*
 
 > **Execution Note for Antigravity (Gemini)**:
-> 1. **Sandbox Bypass**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`) execute host binaries (`~/.local/bin/claude`) and require internet access. You **MUST** execute them via `run_command` with `BypassSandbox: true`.
-> 2. **Direct Invocation**: Directly invoke `claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-refine`, or `claude-review` (in `~/.local/bin` on PATH) or use `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
+> 1. **Sandbox Bypass**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`) execute host binaries (`~/.local/bin/claude`, `~/.local/bin/codex`) and require internet access. You **MUST** execute them via `run_command` with `BypassSandbox: true`.
+> 2. **Direct Invocation**: Directly invoke `claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-followup`, or `codex-optimize` (in `~/.local/bin` on PATH) or use `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
 > 3. **Sandbox Error Handling**: If exit 126 or "Operation not permitted" occurs, it means `BypassSandbox: true` was omitted. Immediately re-run with `BypassSandbox: true`. Do NOT switch to fallback.
 
 ## 2. Mandatory Rules
 - **Brainstorming / Plan**: Proactively consult peer agents (`claude-brainstorm` / `codex-brainstorm` / `claude-design` / `claude-refine`) with `BypassSandbox: true` to cross-reference designs and explore edge cases.
 - **Pre-flight Verification**: Run `claude-review` with `BypassSandbox: true` before finalizing plans or claiming task completion.
-- **Background Execution Synchronization**: When `claude-brainstorm`, `codex-brainstorm`, `claude-design` or `claude-review` runs in background (~15-30s), **DO NOT** prematurely output "設計已完成" or finalize `implementation_plan.md`. Yield the turn (stop calling tools) and wait for the reactive wake-up message, then synthesize peer findings into the final plan.
-- **Sandbox vs Fallback**:
-  - Exit 126 / Sandbox Block: Re-run with `BypassSandbox: true`.
+- **Background Execution Synchronization**: When peer agents run in background (~15-30s), **DO NOT** prematurely output "設計已完成" or finalize `implementation_plan.md`. Yield the turn (stop calling tools) and wait for the reactive wake-up message, then synthesize peer findings into the final plan.
+- **Multi-Turn Continuity & Anti-Hallucination**: Peer agent CLIs are stateless by default. For multi-turn followups with the same agent, use `claude-followup`, `codex-followup` or `-c`. For cross-agent workflows (e.g. Codex notes + Claude review -> plan), use explicit context piping (`claude-refine <target> "<goal>" [ref_files...]`). Never run raw stateless commands expecting past context to be remembered.
+- **Sandbox vs Fallback vs Input Error**:
+  - Exit 126 / Sandbox Block: Re-run once with `BypassSandbox: true` (if 126 persists, fallback to internal reasoning).
+  - Exit 1 / Input Error (missing arguments, missing files, or no recorded session): Fix input or run without `-c`. Do NOT trigger fallback.
   - Exit 100 / Rate limit / Quota failure: Antigravity seamlessly continues internally with its own reasoning.
 ```
 
@@ -101,14 +99,17 @@ flowchart TD
         CR["claude-refine<br/>(Spec & Prompt Refinement)"]
         CW["claude-review<br/>(Strict Git Diff Code Review)"]
         CO["codex-optimize<br/>(Perf/Algorithmic & Terminal Automation)"]
+        CF["claude-followup / codex-followup<br/>(Multi-Turn Session Continuation)"]
     end
 
     B -.-> CB
     B -.-> XB
     B -.-> CD
     P -.-> CR
+    P -.-> CF
     T -.-> CW
     T -.-> CO
+    T -.-> CF
     CW --> V
     CO --> V
 ```
