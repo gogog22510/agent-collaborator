@@ -221,10 +221,6 @@ if [ -z "$(echo "$OUTPUT_STR" | tr -d '[:space:]')" ]; then
   echo "Reason: Claude CLI returned empty response."
   exit 100
 fi
-  echo "⚠️ [FALLBACK_TRIGGERED: CLAUDE_UNAVAILABLE]"
-  echo "Reason: Claude CLI returned empty response."
-  exit 100
-fi
 
 echo "$OUTPUT_STR"
 exit 0

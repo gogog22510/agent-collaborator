@@ -159,10 +159,6 @@ if [ -z "$(echo "$OUTPUT_STR" | tr -d '[:space:]')" ]; then
   echo "Reason: Codex CLI returned empty response."
   exit 100
 fi
-  echo "⚠️ [FALLBACK_TRIGGERED: CODEX_UNAVAILABLE]"
-  echo "Reason: Codex CLI returned empty response."
-  exit 100
-fi
 
 echo "$OUTPUT_STR"
 exit 0
