@@ -33,11 +33,11 @@ mkdir -p "$(dirname "$OUTPUT_TALLY")"
 claude_valid=true
 codex_valid=true
 
-if [ ! -f "$CLAUDE_BALLOT" ] || ! jq empty "$CLAUDE_BALLOT" 2>/dev/null; then
+if [ ! -s "$CLAUDE_BALLOT" ] || ! jq -e . "$CLAUDE_BALLOT" >/dev/null 2>&1; then
   claude_valid=false
 fi
 
-if [ ! -f "$CODEX_BALLOT" ] || ! jq empty "$CODEX_BALLOT" 2>/dev/null; then
+if [ ! -s "$CODEX_BALLOT" ] || ! jq -e . "$CODEX_BALLOT" >/dev/null 2>&1; then
   codex_valid=false
 fi
 
