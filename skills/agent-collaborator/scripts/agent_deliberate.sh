@@ -14,10 +14,19 @@
 #   --jetski-evidence <FILE>        Path to empirical evidence markdown file
 #   -h, --help                      Show this help message
 
-set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." 2>/dev/null && pwd || pwd)"
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Error: jq is required but not installed." >&2
+  exit 1
+fi
 
 MAX_ROUNDS=3
 MODEL_CLAUDE=""
@@ -31,17 +40,27 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     -r|--rounds|--max-rounds)
       if [[ -n "${2:-}" && "${2:-}" =~ ^[0-9]+$ ]]; then
-        MAX_ROUNDS="$2"
+        MAX_ROUNDS="$((10#$2))"
+        if [ "$MAX_ROUNDS" -lt 1 ] || [ "$MAX_ROUNDS" -gt 10 ]; then
+          echo "Error: --rounds must be between 1 and 10." >&2
+          exit 1
+        fi
         shift 2
       else
-        echo "Error: --rounds requires an integer argument." >&2
+        echo "Error: --rounds requires an integer argument between 1 and 10." >&2
         exit 1
       fi
       ;;
     --rounds=*|--max-rounds=*)
-      MAX_ROUNDS="${1#*=}"
-      if ! [[ "$MAX_ROUNDS" =~ ^[0-9]+$ ]]; then
-        echo "Error: --rounds requires an integer argument." >&2
+      RAW_ROUNDS="${1#*=}"
+      if [[ "$RAW_ROUNDS" =~ ^[0-9]+$ ]]; then
+        MAX_ROUNDS="$((10#$RAW_ROUNDS))"
+        if [ "$MAX_ROUNDS" -lt 1 ] || [ "$MAX_ROUNDS" -gt 10 ]; then
+          echo "Error: --rounds must be between 1 and 10." >&2
+          exit 1
+        fi
+      else
+        echo "Error: --rounds requires an integer argument between 1 and 10." >&2
         exit 1
       fi
       shift
@@ -73,16 +92,20 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --id)
-      if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
+      if [[ -n "${2:-}" && "${2:-}" =~ ^[A-Za-z0-9._-]+$ ]]; then
         DELIBERATION_ID="$2"
         shift 2
       else
-        echo "Error: --id requires an identifier argument." >&2
+        echo "Error: --id must be a safe identifier (letters, digits, dots, underscores, dashes)." >&2
         exit 1
       fi
       ;;
     --id=*)
       DELIBERATION_ID="${1#*=}"
+      if ! [[ "$DELIBERATION_ID" =~ ^[A-Za-z0-9._-]+$ ]]; then
+        echo "Error: --id must be a safe identifier (letters, digits, dots, underscores, dashes)." >&2
+        exit 1
+      fi
       shift
       ;;
     -d|--dir)
@@ -145,7 +168,18 @@ fi
 
 TOPIC="$1"
 shift
-CONTEXT_FILES=("$@")
+
+# Validate and resolve context files to absolute paths
+RESOLVED_CONTEXT_FILES=()
+for f in "$@"; do
+  if [ -f "$f" ]; then
+    RESOLVED_CONTEXT_FILES+=("$(cd "$(dirname "$f")" && pwd)/$(basename "$f")")
+  else
+    echo "Error: Context file '$f' not found." >&2
+    exit 1
+  fi
+done
+CONTEXT_FILES=("${RESOLVED_CONTEXT_FILES[@]+"${RESOLVED_CONTEXT_FILES[@]}"}")
 
 # Resolve Deliberation ID
 if [ -z "$DELIBERATION_ID" ]; then
@@ -171,6 +205,16 @@ DELIBERATION_DIR="$(cd "$DELIBERATION_DIR" && pwd)"
 # Initialize or update manifest.json
 MANIFEST_FILE="$DELIBERATION_DIR/manifest.json"
 CREATED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+# Prevent ID collision / silent topic reuse
+if [ -f "$MANIFEST_FILE" ]; then
+  EXISTING_TOPIC=$(jq -r '.topic // empty' "$MANIFEST_FILE" 2>/dev/null || true)
+  if [ -n "$EXISTING_TOPIC" ] && [ "$EXISTING_TOPIC" != "$TOPIC" ]; then
+    echo "Error: Deliberation directory '$DELIBERATION_DIR' already exists with a different topic: '$EXISTING_TOPIC'." >&2
+    echo "Please specify a unique --id or use a different directory." >&2
+    exit 1
+  fi
+fi
 
 # Context files JSON array
 CONTEXT_JSON="[]"
@@ -239,6 +283,8 @@ if [ -z "$ROUND_DRIVER" ]; then
     ROUND_DRIVER="$SCRIPT_DIR/consensus_round.sh"
   elif command -v consensus_round.sh >/dev/null 2>&1; then
     ROUND_DRIVER="$(command -v consensus_round.sh)"
+  elif command -v consensus-round >/dev/null 2>&1; then
+    ROUND_DRIVER="$(command -v consensus-round)"
   else
     echo "Error: consensus_round.sh driver not found in $SCRIPT_DIR or PATH." >&2
     exit 1
@@ -259,15 +305,30 @@ round_dir = sys.argv[3]
 blueprint_out = sys.argv[4]
 round_num = sys.argv[5]
 
+def escape_md(text):
+    return str(text).replace("|", "\\|").replace("\n", " ").strip()
+
 manifest = {}
 if os.path.exists(manifest_file):
     with open(manifest_file, "r", encoding="utf-8") as f:
         manifest = json.load(f)
 
-tally = {}
-if os.path.exists(tally_file):
-    with open(tally_file, "r", encoding="utf-8") as f:
-        tally = json.load(f)
+if not os.path.exists(tally_file):
+    print(f"Error: tally file {tally_file} not found for blueprint generation.", file=sys.stderr)
+    sys.exit(1)
+
+with open(tally_file, "r", encoding="utf-8") as f:
+    tally = json.load(f)
+
+status = tally.get("status")
+if status not in ("CONVERGED", "CONVERGED_WITH_DISSENT"):
+    print(f"Error: Deliberation has not converged (status: {status}). Blueprint cannot be generated.", file=sys.stderr)
+    sys.exit(1)
+
+consensus_opt = tally.get("consensus_option")
+if not consensus_opt or consensus_opt == "null":
+    print("Error: Missing or invalid consensus_option in tally.json.", file=sys.stderr)
+    sys.exit(1)
 
 claude_ballot = {}
 claude_path = os.path.join(round_dir, "claude_ballot.json")
@@ -283,12 +344,11 @@ if os.path.exists(codex_path):
 
 delib_id = manifest.get("deliberation_id", "deliberation")
 topic = manifest.get("topic", "No topic specified")
-status = tally.get("status", "CONVERGED")
-consensus_opt = tally.get("consensus_option", "Option_0")
 yagni_avg = tally.get("yagni_score_avg", 5.0)
 spreads = tally.get("score_spreads", {})
 max_rounds_val = manifest.get("max_rounds", 3)
-updated_at_val = manifest.get("updated_at", "")
+updated_at_val = manifest.get("updated_at", manifest.get("created_at", ""))
+
 
 lines = []
 lines.append(f"# Multi-Agent Consensus Architecture Blueprint")

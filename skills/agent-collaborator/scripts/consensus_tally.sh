@@ -153,14 +153,28 @@ jq -s \
   (($c.over_architecture_flags // []) + ($x.over_architecture_flags // [])) as $over_architecture_flags |
 
   ($c.preferred_option != null and $c.preferred_option == $x.preferred_option) as $preferred_matches |
-  ($c.stance == "BLOCK" or $x.stance == "BLOCK" or ($blocking_objections | length > 0) or ($over_architecture_flags | length > 0)) as $has_block |
+  $c.preferred_option as $candidate_option |
+
+  # Filter active flags and objections targeting the candidate option
+  ($blocking_objections | map(select(
+    (.target_option == null or .target_option == "" or .target_option == $candidate_option)
+  ))) as $active_objections |
+
+  ($over_architecture_flags | map(select(
+    (.target_option == null or .target_option == "" or .target_option == $candidate_option)
+  ))) as $active_flags |
+
+  # Per-peer YAGNI floor >= 3.0 and average >= 3.5
+  ($c_yp >= 3.0 and $x_yp >= 3.0 and $yagni_avg >= 3.5) as $yagni_pass |
+
+  ($c.stance == "BLOCK" or $x.stance == "BLOCK" or ($active_objections | length > 0) or ($active_flags | length > 0)) as $has_block |
 
   ([$spreads[]] | all(. <= 1)) as $all_spreads_lte_1 |
 
   (
-    if $preferred_matches and ($has_block | not) and ($yagni_avg >= 3.5) and $all_spreads_lte_1 then
+    if $preferred_matches and ($has_block | not) and $yagni_pass and $all_spreads_lte_1 then
       "CONVERGED"
-    elif $preferred_matches and ($has_block | not) and ($yagni_avg >= 3.5) and ($all_spreads_lte_1 | not) then
+    elif $preferred_matches and ($has_block | not) and $yagni_pass and ($all_spreads_lte_1 | not) then
       "CONVERGED_WITH_DISSENT"
     elif $round >= $max_rounds then
       "DEADLOCK"

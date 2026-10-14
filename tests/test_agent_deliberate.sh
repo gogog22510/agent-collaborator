@@ -577,4 +577,29 @@ echo "$OUT_100" | grep -q "FALLBACK_TRIGGERED" || { echo "FAIL: Outage output mi
 
 echo "PASS: Exit code propagation verified."
 
+echo "=== Test 6: ID Safety & Path Traversal Validation ==="
+set +e
+ID_ERR=$(bash "$DELIBERATE_SCRIPT" --id "../bad/path" "Bad ID Test" 2>&1)
+ID_CODE=$?
+eval "$SET_E"
+[ "$ID_CODE" -eq 1 ] || { echo "FAIL: Unsafe ID should exit 1, got $ID_CODE" >&2; exit 1; }
+echo "$ID_ERR" | grep -q "safe identifier" || { echo "FAIL: Expected safe identifier error message" >&2; exit 1; }
+echo "PASS: ID safety and path traversal rejection verified."
+
+echo "=== Test 7: Symlink Execution ==="
+# Test that calling via a symlink finds consensus_round.sh
+SYMLINK_BIN_DIR="$TEMP_DIR/symlink_bin"
+mkdir -p "$SYMLINK_BIN_DIR"
+ln -sf "$DELIBERATE_SCRIPT" "$SYMLINK_BIN_DIR/agent-deliberate"
+
+export MOCK_SCENARIO="CONVERGE_ROUND_1"
+TEST7_DIR="$TEMP_DIR/test7_delib"
+set +e
+LINK_OUT=$(bash "$SYMLINK_BIN_DIR/agent-deliberate" --dir "$TEST7_DIR" "Symlink Test" 2>&1)
+LINK_CODE=$?
+eval "$SET_E"
+[ "$LINK_CODE" -eq 0 ] || { echo "FAIL: Symlink execution failed with exit $LINK_CODE: $LINK_OUT" >&2; exit 1; }
+echo "PASS: Symlink execution verified."
+
 echo "All agent_deliberate tests passed successfully!"
+
