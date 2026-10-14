@@ -2,3 +2,6 @@
 *.log
 tmp/
 node_modules/
+.superpowers/
+.agent/deliberations/
+
