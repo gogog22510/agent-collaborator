@@ -1,6 +1,6 @@
 ---
 name: agent-collaborator
-description: Coordinate with external coding agents (Claude CLI, OpenAI Codex, etc.) on the local machine for architecture design, code review, spec optimization, and prompt engineering with automatic fallback.
+description: Coordinate with external coding agents (Claude CLI, OpenAI Codex, etc.) on the local machine for architecture design, code review, spec optimization, multi-agent consensus deliberation, and prompt engineering with automatic fallback.
 ---
 
 # Universal Agent Collaborator Skill
@@ -19,10 +19,14 @@ This skill enables a universal, language-agnostic **Multi-Agent / Dual-Agent Wor
   - Algorithmic complexity / performance-hotspot analysis and heavy shell/CLI/CI automation (`codex_optimize.sh`). Codex leads Terminal-Bench-style agentic shell tasks and typically uses far fewer tokens per task, making it the cheaper choice for high-volume, terminal-heavy consultations.
   - Second opinion / cross-model verification on architecture or review conclusions from Claude, when trade-offs are contentious.
   - **Computer Use (GUI-driven tasks)**: recent Codex (via the ChatGPT desktop/Codex app, not the headless CLI) can see the screen and drive the mouse/keyboard to operate real apps (browser, Figma, Xcode, Slack, etc.). This is genuinely useful for visually verifying a UI change, testing an external app's behavior, or interacting with tools that have no CLI/API — but it is **not scriptable non-interactively** the way `codex exec` is. When a task needs this, tell the user/operator to drive it manually from the Codex desktop app rather than expecting an automated script to do it; do not fabricate a headless "computer use" script.
-- **Primary Agent (Antigravity / Gemini - The Orchestrator & Implementer)**:
+- **Jetski Agent (Antigravity Native Subagent - Empirical Spike Collector)**:
+  - Factual ground truth verification, throwaway benchmark spikes, API behavior verification, and codebase metric audits.
+  - Resolves factual objections between Claude and Codex without voting subjectively (preventing double-voting).
+- **Primary Agent (Antigravity / Gemini - The Orchestrator & Deliberation Moderator)**:
   - Project discovery, codebase-wide search & context assembly
   - File generation & refactoring across any language stack
   - Toolchain execution (build tools, linters, test runners, git)
+  - Deliberation host: problem & Option 0 MVA framing, round digest synthesis, and deterministic consensus gating
   - **Self-Healing Fallback**: When an external agent hits rate limits, credit limits, or errors (exit code 100 or `FALLBACK_TRIGGERED`), Antigravity seamlessly assumes the Design / Review / Optimization role and continues without halting the task.
 
 ## Universal Helper Scripts
@@ -31,7 +35,7 @@ Scripts auto-detect the current project type (`pubspec.yaml`, `package.json`, `C
 
 They are globally available at: `~/.gemini/config/skills/agent-collaborator/scripts/` (or locally at `.agent/skills/agent-collaborator/scripts/` or standalone in `~/.local/bin/`).
 
-> ⚠️ **Antigravity Sandbox Requirement**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`) execute host binaries (`~/.local/bin/claude`, `~/.local/bin/codex`) and require outbound internet access to the model APIs. In Antigravity, you **MUST** run them using `run_command` with `BypassSandbox: true`. Do NOT run them in standard sandbox mode.
+> ⚠️ **Antigravity Sandbox Requirement**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`, `agent-deliberate`, `consensus-round`) execute host binaries (`~/.local/bin/claude`, `~/.local/bin/codex`) and require outbound internet access to the model APIs. In Antigravity, you **MUST** run them using `run_command` with `BypassSandbox: true`. Do NOT run them in standard sandbox mode.
 
 ### Dynamic Model Switching & Multi-Turn Session Continuation
 All scripts support:
@@ -93,6 +97,56 @@ codex-followup [--model <model>] "<FOLLOWUP_PROMPT>" [CONTEXT_FILES...]
 # or: bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_followup.sh [--model <model>] "<FOLLOWUP_PROMPT>" [CONTEXT_FILES...]
 ```
 
+### 8. Multi-Agent Consensus Deliberation (`agent-deliberate` & `consensus-round`)
+When facing major architectural trade-offs, conflicting implementation proposals, or contentious designs, run a structured, ring-topology debate between Claude (architect) and Codex (pragmatic red team / YAGNI watchdog), moderated by Antigravity with empirical spike support from Jetski.
+
+```bash
+# High-level deliberation runner (executes full multi-round convergence loop):
+agent-deliberate [OPTIONS] "<TOPIC_OR_REQUIREMENT>" [CONTEXT_FILES...]
+
+Options:
+  -r, --rounds <N>        Maximum deliberation rounds (default: 3)
+  --model-claude <M>      Model name for Claude CLI (e.g. sonnet, opus)
+  --model-codex <M>       Model name for Codex CLI (e.g. o3-mini, o3)
+  --id <ID>               Explicit deliberation ID (default: dlb-YYYYMMDD-XXXX)
+  -d, --dir <DIR>         Ledger directory (default: .agent/deliberations/<ID>)
+  --jetski-evidence <F>   Empirical test / benchmark evidence file
+  -h, --help              Show this help message
+
+# Example:
+agent-deliberate --rounds 3 "Design an in-memory cache strategy with TTL eviction for CLI tools" context.md
+
+# Single-round concurrent driver (executes Claude and Codex concurrently in isolated subshells):
+consensus-round [OPTIONS] <DELIBERATION_DIR> <ROUND_NUM>
+
+Options:
+  -r, --max-rounds <N>    Maximum rounds allowed (default: 3)
+  --model-claude <M>      Model name for Claude CLI
+  --model-codex <M>       Model name for Codex CLI
+```
+
+#### Deliberation Ledger Directory Structure
+All deliberation rounds, ballots, digests, and blueprints are persisted under `.agent/deliberations/<ID>/`:
+```text
+.agent/deliberations/dlb-YYYYMMDD-XXXX/
+├── manifest.json              # Topic, options, metrics, MAX_ROUNDS, status
+├── option_0_baseline.md       # Mandatory Minimal Viable Architecture (MVA) baseline
+├── round-1/
+│   ├── claude_ballot.json     # Machine-readable ballot (JSON)
+│   ├── claude_ballot.md       # Human-readable rationale (Markdown)
+│   ├── codex_ballot.json      # Machine-readable ballot (JSON)
+│   ├── codex_ballot.md        # Human-readable rationale (Markdown)
+│   ├── tally.json             # Deterministic jq scoring evaluation & status
+│   └── digest.md              # Anonymized summary for Round 2 (if debate continues)
+├── round-2/
+│   ├── jetski_evidence.md     # Empirical spike benchmark output (if factual dispute)
+│   ├── claude_ballot.json
+│   ├── codex_ballot.json
+│   └── tally.json
+├── dissent_register.md        # Unresolved disagreements (generated upon DEADLOCK)
+└── final_blueprint.md         # Final consensus design and implementation roadmap
+```
+
 ## 🔄 Multi-Turn Collaboration & Memory Anti-Hallucination Protocol
 
 External peer agent CLIs are **stateless by default**. Orchestrators MUST NOT assume a bare `claude -p "Based on earlier findings..."` knows previous turns!
@@ -110,7 +164,7 @@ To handle multi-turn collaboration correctly:
 Because Claude CLI and Codex perform deep LLM reasoning, commands typically take 15–30 seconds, exceeding Antigravity's maximum synchronous wait limit (10,000ms) and running as **background tasks**.
 
 ### 🛑 CRITICAL: Do NOT Prematurely Finalize Milestones
-When a peer agent command (`claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-review`, `claude-refine`, `claude-followup`, `codex-followup`, `codex-optimize`) is sent to the background:
+When a peer agent command (`claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-review`, `claude-refine`, `claude-followup`, `codex-followup`, `codex-optimize`, `agent-deliberate`) is sent to the background:
 1. **The milestone is NOT complete**: You **MUST NOT** write a final `implementation_plan.md`, declare "設計已完成" (design completed) or "審查通過" (review passed), or invite the user to proceed. Doing so invalidates the peer collaboration.
 2. **End Your Turn & Wait**:
    - Briefly notify the user (e.g. *"已啟動 `claude-design` 進行架構諮詢，正在等待 Claude 分析反饋以整合至設計計畫中..."*).

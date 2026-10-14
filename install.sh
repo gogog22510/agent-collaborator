@@ -34,9 +34,11 @@ install_cli() {
   ln -sf "$SKILL_SRC/scripts/codex_brainstorm.sh" "$BIN_DIR/codex-brainstorm"
   ln -sf "$SKILL_SRC/scripts/codex_optimize.sh" "$BIN_DIR/codex-optimize"
   ln -sf "$SKILL_SRC/scripts/codex_followup.sh" "$BIN_DIR/codex-followup"
+  ln -sf "$SKILL_SRC/scripts/agent_deliberate.sh" "$BIN_DIR/agent-deliberate"
+  ln -sf "$SKILL_SRC/scripts/consensus_round.sh" "$BIN_DIR/consensus-round"
   rm -f "$BIN_DIR/claude-prompt-tune" 2>/dev/null || true
 
-  chmod +x "$BIN_DIR/claude-brainstorm" "$BIN_DIR/claude-design" "$BIN_DIR/claude-review" "$BIN_DIR/claude-refine" "$BIN_DIR/claude-followup" "$BIN_DIR/codex-brainstorm" "$BIN_DIR/codex-optimize" "$BIN_DIR/codex-followup"
+  chmod +x "$BIN_DIR/claude-brainstorm" "$BIN_DIR/claude-design" "$BIN_DIR/claude-review" "$BIN_DIR/claude-refine" "$BIN_DIR/claude-followup" "$BIN_DIR/codex-brainstorm" "$BIN_DIR/codex-optimize" "$BIN_DIR/codex-followup" "$BIN_DIR/agent-deliberate" "$BIN_DIR/consensus-round"
   echo -e "${GREEN}✓ CLI tools linked:${NC}"
   echo "    - $BIN_DIR/claude-brainstorm"
   echo "    - $BIN_DIR/claude-design"
@@ -46,6 +48,8 @@ install_cli() {
   echo "    - $BIN_DIR/codex-brainstorm"
   echo "    - $BIN_DIR/codex-optimize"
   echo "    - $BIN_DIR/codex-followup"
+  echo "    - $BIN_DIR/agent-deliberate"
+  echo "    - $BIN_DIR/consensus-round"
   if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
     echo -e "${YELLOW}  ⚠ Note: Ensure $BIN_DIR is in your PATH in ~/.zshrc or ~/.bashrc${NC}"
   fi
@@ -308,7 +312,7 @@ show_menu() {
   print_banner
   echo "Select an installation target:"
   echo "  1) All (CLI Tools + Antigravity Global + Claude Code Global) [Recommended]"
-  echo "  2) Standalone CLI Tools only (~/.local/bin/claude-design, ...)"
+  echo "  2) Standalone CLI Tools only (~/.local/bin/claude-design, agent-deliberate, ...)"
   echo "  3) Antigravity Global Skills (~/.gemini/...)"
   echo "  4) Project-Local Skill (.agent/skills/ in current directory)"
   echo "  5) Claude Code Global Skills (~/.claude/skills/)"
