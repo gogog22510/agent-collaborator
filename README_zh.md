@@ -57,6 +57,8 @@ flowchart TD
 | **`claude-followup`** | 多輪會話接續，沿用當前目錄的 Claude 既有對話上下文 | `claude-followup [--model <model>] "<追問或生成指令>" [上下文檔案...]` |
 | **`codex-followup`** | 多輪會話接續，恢復當前目錄的最新 Codex 會話 (`resume --last`) | `codex-followup [--model <model>] "<追問或生成指令>" [上下文檔案...]` |
 | **`codex-optimize`** | 演算法複雜度/效能瓶頸分析、終端機與 CI 自動化 | `codex-optimize [--model <model>] [-c] "<任務或需求>" [上下文檔案...]` |
+| **`agent-deliberate`** | 多模型環狀共識研討，具備結構化指標表、Option 0 基線與 YAGNI 過度架構否決權 | `agent-deliberate [--rounds 3] "<議題或需求>" [上下文檔案...]` |
+| **`consensus-round`** | 單輪並行研討執行驅動腳本 | `consensus-round "<研討目錄>" <輪次>` |
 
 ### 🎛️ 動態模型切換與任務分級
 所有腳本皆支援即時切換模型，具備三層優先級規則：
@@ -187,6 +189,7 @@ flowchart TD
         CB["claude-brainstorm<br/>(發散思維與方案評估)"]
         XB["codex-brainstorm<br/>(工程可行性與反向思考)"]
         CD["claude-design<br/>(架構可行性與狀態機對照)"]
+        AD["agent-deliberate<br/>(多模型共識研討與審議)"]
         CR["claude-refine<br/>(規格與 Prompt 精煉)"]
         CW["claude-review<br/>(Git Diff 嚴格代碼審查)"]
         CO["codex-optimize<br/>(效能/演算法與終端機自動化)"]
@@ -196,6 +199,7 @@ flowchart TD
     B -.->|發散思維諮詢| CB
     B -.->|工程可行性諮詢| XB
     B -.->|架構設計諮詢| CD
+    B -.->|共識研討與架構裁決| AD
     P -.->|Antigravity 調度精煉| CR
     P -.->|多輪會話延續| CF
     T -.->|Antigravity 調度審查| CW
@@ -218,7 +222,7 @@ flowchart TD
 ## 🛡️ 自動優雅降級機制 (Graceful Self-Healing Fallback)
 
 ### Antigravity 沙盒環境注意 (Sandbox Handling)
-外部 Peer Agent 工具 (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`) 需調用 Host 端本機二進位執行檔 (`~/.local/bin/claude`, `~/.local/bin/codex`) 以及連線至外部 API：
+外部 Peer Agent 工具 (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`, `agent-deliberate`, `consensus-round`) 需調用 Host 端本機二進位執行檔 (`~/.local/bin/claude`, `~/.local/bin/codex`) 以及連線至外部 API：
 - **`BypassSandbox: true` 必備**：在 Antigravity 透過 `run_command` 調用外部 Agent 時，必須加上 `BypassSandbox: true`。
 - **沙盒權限阻擋 (Exit 126)**：若在預設 Sandbox 內執行，會返回 `❌ [SANDBOX_BLOCKED] (Exit: 126)`。指揮官將補上 `BypassSandbox: true` 重新嘗試一次（若依然失敗則轉為內部推理降級，避免無限重試循環）。
 

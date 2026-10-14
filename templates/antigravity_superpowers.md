@@ -58,16 +58,17 @@ Since Superpowers/Antigravity are driven by your project's `AGENTS.md`, `--proje
   - `claude-followup [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_followup.sh`): Multi-turn session continuation for Claude
   - `codex-followup [--model <model>]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_followup.sh`): Multi-turn session continuation for Codex
   - `codex-optimize [--model <model>] [-c]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`): Algorithmic/performance analysis & terminal/CI automation, using Codex's actual strengths (Terminal-Bench-leading agentic shell tasks, cheaper per-task on high-volume work). Codex's **Computer Use** (GUI screen/mouse/keyboard control) only exists in the Codex desktop app, not this headless script — route GUI-verification needs there.
+  - `agent-deliberate [--rounds 3]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/agent_deliberate.sh`): Multi-agent ring-structured consensus deliberation with Structured Metric Table, mandatory Option 0 MVA baseline, YAGNI over-architecture veto, and empirical Jetski probes.
   - *Model Selection*: All commands support `--model <name>` / `-m <name>` or environment variables (`CLAUDE_MODEL`, `CODEX_MODEL`, `AGENT_MODEL`). Antigravity can choose fast models (`haiku`, `o3-mini`) for lightweight tasks or top models (`opus`, `sonnet`, `o3`) for deep architectures.
   - *(Extensible: Add other custom peer agent scripts under `.agent/skills/` or `~/.local/bin/`)*
 
 > **Execution Note for Antigravity (Gemini)**:
-> 1. **Sandbox Bypass**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`) execute host binaries (`~/.local/bin/claude`, `~/.local/bin/codex`) and require internet access. You **MUST** execute them via `run_command` with `BypassSandbox: true`.
-> 2. **Direct Invocation**: Directly invoke `claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-followup`, or `codex-optimize` (in `~/.local/bin` on PATH) or use `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
+> 1. **Sandbox Bypass**: External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`, `agent-deliberate`, `consensus-round`) execute host binaries (`~/.local/bin/claude`, `~/.local/bin/codex`) and require internet access. You **MUST** execute them via `run_command` with `BypassSandbox: true`.
+> 2. **Direct Invocation**: Directly invoke `claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-followup`, `codex-optimize`, `agent-deliberate`, or `consensus-round` (in `~/.local/bin` on PATH) or use `bash ~/.gemini/config/skills/agent-collaborator/scripts/<script>.sh`. Do NOT spend turns running `which` or searching for scripts.
 > 3. **Sandbox Error Handling**: If exit 126 or "Operation not permitted" occurs, it means `BypassSandbox: true` was omitted. Immediately re-run with `BypassSandbox: true`. Do NOT switch to fallback.
 
 ## 2. Mandatory Rules
-- **Brainstorming / Plan**: Proactively consult peer agents (`claude-brainstorm` / `codex-brainstorm` / `claude-design` / `claude-refine`) with `BypassSandbox: true` to cross-reference designs and explore edge cases.
+- **Brainstorming / Plan**: Proactively consult peer agents (`claude-brainstorm` / `codex-brainstorm` / `claude-design` / `claude-refine` / `agent-deliberate`) with `BypassSandbox: true` to cross-reference designs and explore edge cases.
 - **Pre-flight Verification**: Run `claude-review` with `BypassSandbox: true` before finalizing plans or claiming task completion.
 - **Background Execution Synchronization**: When peer agents run in background (~15-30s), **DO NOT** prematurely output "設計已完成" or finalize `implementation_plan.md`. Yield the turn (stop calling tools) and wait for the reactive wake-up message, then synthesize peer findings into the final plan.
 - **Multi-Turn Continuity & Anti-Hallucination**: Peer agent CLIs are stateless by default. For multi-turn followups with the same agent, use `claude-followup`, `codex-followup` or `-c`. For cross-agent workflows (e.g. Codex notes + Claude review -> plan), use explicit context piping (`claude-refine <target> "<goal>" [ref_files...]`). Never run raw stateless commands expecting past context to be remembered.
@@ -92,10 +93,11 @@ flowchart TD
         V["4. Verification (End-to-End Proof & Delivery)"]
     end
 
-    subgraph PeerAdvisors["🏛️ Peer Advisory Council (Claude / Codex / Extensible)"]
+    subgraph PeerAdvisors["🏛️ Peer Advisory Council (Claude / Codex / Jetski)"]
         CB["claude-brainstorm<br/>(Divergent Ideation & Trade-offs)"]
         XB["codex-brainstorm<br/>(Engineering Feasibility & Minimal Design)"]
         CD["claude-design<br/>(Architecture Validation & Boundary Check)"]
+        AD["agent-deliberate<br/>(Multi-Agent Consensus Deliberation)"]
         CR["claude-refine<br/>(Spec & Prompt Refinement)"]
         CW["claude-review<br/>(Strict Git Diff Code Review)"]
         CO["codex-optimize<br/>(Perf/Algorithmic & Terminal Automation)"]
@@ -105,6 +107,7 @@ flowchart TD
     B -.-> CB
     B -.-> XB
     B -.-> CD
+    B -.-> AD
     P -.-> CR
     P -.-> CF
     T -.-> CW

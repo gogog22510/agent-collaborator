@@ -61,6 +61,8 @@ Once installed, you can use these tools directly in any terminal or allow Antigr
 | **`claude-followup`** | Multi-turn session continuation, iterating on previous Claude discussion | `claude-followup [--model <model>] "<prompt>" [context_files...]` |
 | **`codex-followup`** | Multi-turn session continuation, resuming latest Codex session | `codex-followup [--model <model>] "<prompt>" [context_files...]` |
 | **`codex-optimize`** | Algorithmic complexity/performance analysis & terminal/CI automation | `codex-optimize [--model <model>] [-c] "<task_or_requirement>" [context_files...]` |
+| **`agent-deliberate`** | Multi-agent ring-structured consensus deliberation with Structured Metric Table & YAGNI veto | `agent-deliberate [--rounds 3] "<topic_or_requirement>" [context_files...]` |
+| **`consensus-round`** | Single-round concurrent driver for deliberation sessions | `consensus-round "<deliberation_dir>" <round_num>` |
 
 ### 🎛️ Dynamic Model Switching & Sizing
 All scripts support on-the-fly model switching with 3-tier precedence:
@@ -190,6 +192,7 @@ flowchart TD
         CB["claude-brainstorm<br/>(Divergent Ideation & Trade-offs)"]
         XB["codex-brainstorm<br/>(Engineering Feasibility & Minimal Design)"]
         CD["claude-design<br/>(Architecture Validation & State Topology)"]
+        AD["agent-deliberate<br/>(Multi-Agent Consensus Deliberation)"]
         CR["claude-refine<br/>(Spec & Prompt Refinement)"]
         CW["claude-review<br/>(Strict Git Diff Code Review)"]
         CO["codex-optimize<br/>(Perf/Algorithmic & Terminal Automation)"]
@@ -199,6 +202,7 @@ flowchart TD
     B -.->|Ideation Pass| CB
     B -.->|Feasibility Pass| XB
     B -.->|Architecture Pass| CD
+    B -.->|Consensus Deliberation| AD
     P -.->|Antigravity Dispatches Refinement| CR
     P -.->|Session Follow-up & Iteration| CF
     T -.->|Antigravity Dispatches Pre-flight Review| CW
@@ -221,7 +225,7 @@ Ready-to-use integration contracts are available in the `templates/` directory:
 ## 🛡️ Graceful Self-Healing Fallback
 
 ### Antigravity Sandbox Handling
-External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`) execute host binaries (`~/.local/bin/claude`, `~/.local/bin/codex`) and require outbound internet access to the model APIs.
+External peer agent tools (`claude-brainstorm`, `claude-design`, `claude-refine`, `claude-review`, `claude-followup`, `codex-brainstorm`, `codex-optimize`, `codex-followup`, `agent-deliberate`, `consensus-round`) execute host binaries (`~/.local/bin/claude`, `~/.local/bin/codex`) and require outbound internet access to the model APIs.
 - **`BypassSandbox: true` Requirement**: When Antigravity calls these tools via `run_command`, it must set `BypassSandbox: true`.
 - **Sandbox Isolation Error (Exit 126)**: If the command is mistakenly executed inside standard sandbox mode, it returns `❌ [SANDBOX_BLOCKED] (Exit: 126)`. The orchestrator will re-run once with `BypassSandbox: true` (falling back to internal reasoning if 126 persists to prevent loops).
 

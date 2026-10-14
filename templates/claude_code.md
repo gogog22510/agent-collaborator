@@ -13,6 +13,8 @@ This project integrates automated multi-model helpers located at `~/.local/bin` 
 - `claude-followup [--model <model>] "<prompt>" [files...]` - Multi-turn session continuation (Claude)
 - `codex-followup [--model <model>] "<prompt>" [files...]` - Multi-turn session continuation (Codex)
 - `codex-optimize [--model <model>] [-c] "<task>" [files...]` - Algorithmic/performance analysis & terminal/CI automation (Codex)
+- `agent-deliberate [--rounds 3] "<topic>" [files...]` - Multi-agent ring-structured consensus deliberation with Structured Metric Table & YAGNI veto
+- `consensus-round "<dir>" <round>` - Single-round concurrent driver for deliberation
 *(All tools support `--model <name>` / `-m <name>` or env vars `CLAUDE_MODEL`, `CODEX_MODEL`, `AGENT_MODEL`, and `-c|--continue` for session continuation)*
 ```
 
