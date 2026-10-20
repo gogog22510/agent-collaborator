@@ -56,6 +56,15 @@ Option 0 represents the most direct, naive, and dependency-free implementation u
 ```
 {{/IF_ROUND_GREATER_THAN_1}}
 
+{{#IF_GUIDANCE}}
+### 👤 Human Moderator Guidance & Arbitration
+The human operator has provided the following directive to steer this deliberation and unblock consensus:
+```markdown
+{{HUMAN_GUIDANCE}}
+```
+You MUST respect this directive in your evaluation, explain how your position aligns with it, and adjust your scores and stance accordingly.
+{{/IF_GUIDANCE}}
+
 ---
 
 ## 3. Evaluation Rubric & Scoring System
@@ -139,6 +148,13 @@ If this is Round > 1 and you changed your preferred option or stance:
 - `justification`: Rigorous explanation of why the evidence or counterargument altered your position.
 *(Note: Shifting stance without technical justification will be rejected by the Moderator as suspected conformity).*
 
+### Counter-Proposals (`counter_proposal`) — Required on BLOCK or when only Option 0 exists
+If your stance is `BLOCK`, or if only `Option_0` exists and you find it inadequate for production:
+You MUST provide a structured `counter_proposal` in your ballot. The Moderator will dynamically register it as an alternative candidate option (`Option_A`, `Option_B`, etc.) for subsequent rounds:
+- `title`: Concise title (e.g., `"Targeted Consistency Repair"`).
+- `description`: Architectural specification of the proposal and why it satisfies the requirement with minimal complexity.
+- `resolves_objections`: Array of objection IDs this counter-proposal addresses (e.g., `["OBJ-1"]`).
+
 ---
 
 ## 6. Required Output Format
@@ -187,7 +203,8 @@ Conform strictly to the following schema without any trailing commas or malforme
   },
   "over_architecture_flags": [],
   "blocking_objections": [],
-  "position_changes": []
+  "position_changes": [],
+  "counter_proposal": null
 }
 ```
 
