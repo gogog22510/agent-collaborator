@@ -1036,29 +1036,23 @@ echo ""
 python3 -c '
 import sys, json, os
 
-claude = {}
-if os.path.exists(sys.argv[1]):
+def load_json(path, label):
+    if not os.path.exists(path):
+        return {}
     try:
-        with open(sys.argv[1], "r", encoding="utf-8") as f:
-            claude = json.load(f)
-    except Exception:
-        pass
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+            sys.stderr.write(f"Warning: Expected dict in {label} ({path}), got {type(data).__name__}\n")
+            return {}
+    except Exception as e:
+        sys.stderr.write(f"Warning: Failed to parse {label} ({path}): {e}\n")
+        return {}
 
-codex = {}
-if os.path.exists(sys.argv[2]):
-    try:
-        with open(sys.argv[2], "r", encoding="utf-8") as f:
-            codex = json.load(f)
-    except Exception:
-        pass
-
-tally = {}
-if os.path.exists(sys.argv[3]):
-    try:
-        with open(sys.argv[3], "r", encoding="utf-8") as f:
-            tally = json.load(f)
-    except Exception:
-        pass
+claude = load_json(sys.argv[1], "claude ballot")
+codex = load_json(sys.argv[2], "codex ballot")
+tally = load_json(sys.argv[3], "tally")
 
 c_p = claude.get("preferred_option", "Unknown")
 x_p = codex.get("preferred_option", "Unknown")

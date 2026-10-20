@@ -142,7 +142,7 @@ elif [ "$MODE" = "FAIL_100" ]; then
   exit 100
 elif [ "$MODE" = "LADDER_TEST" ]; then
   CURRENT_ARGS="$*"
-  if [[ "$CURRENT_ARGS" =~ "--model gpt-5.6-terra" ]] || [[ "$CURRENT_ARGS" =~ "--model gpt-4o" ]] || [[ ! "$CURRENT_ARGS" =~ "--model" ]]; then
+  if [[ "$CURRENT_ARGS" =~ "--model gpt-5.6-terra" ]]; then
     # Fallback model succeeds
     MODE="CONVERGE_OPTION_0"
   else
@@ -541,8 +541,14 @@ if [ "$CLAUDE_MODEL_USED" != "haiku" ]; then
   echo "FAIL: Expected Claude to fallback to haiku, got $CLAUDE_MODEL_USED" >&2
   exit 1
 fi
-if [ "$CODEX_MODEL_USED" != "gpt-5.6-terra" ] && [ "$CODEX_MODEL_USED" != "gpt-4o" ] && [ "$CODEX_MODEL_USED" != "default" ]; then
-  echo "FAIL: Expected Codex to fallback to gpt-5.6-terra, gpt-4o, or default, got $CODEX_MODEL_USED" >&2
+if [ "$CODEX_MODEL_USED" != "gpt-5.6-terra" ]; then
+  echo "FAIL: Expected Codex to fallback to gpt-5.6-terra, got $CODEX_MODEL_USED" >&2
+  exit 1
+fi
+
+CODEX_ATTEMPTS=$(jq -r '.codex.attempts | length' "$META_FILE")
+if [ "$CODEX_ATTEMPTS" -lt 2 ]; then
+  echo "FAIL: Expected at least 2 attempts for Codex fallback ladder, got $CODEX_ATTEMPTS" >&2
   exit 1
 fi
 

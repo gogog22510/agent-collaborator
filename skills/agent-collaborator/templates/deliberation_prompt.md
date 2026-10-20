@@ -23,46 +23,46 @@ Your role is to critically evaluate architectural options for a specific require
 - **Model**: `{{MODEL}}`
 
 ### Topic & Requirement
-```markdown
+````markdown
 {{REQUIREMENT}}
-```
+````
 
 ### Option 0: Mandatory Minimal Viable Architecture (MVA) Baseline
 Option 0 represents the most direct, naive, and dependency-free implementation using native language/OS primitives, single-script execution, and local file storage.
-```markdown
+````markdown
 {{OPTION_0_BASELINE}}
-```
+````
 > **Rule of Option 0**: Any agent advocating for an alternative option (`Option_A`, `Option_B`, etc.) MUST prove: *What specific, critical production failure occurs if Option 0 is adopted?* If Option 0 suffices, it must be selected.
 
 ### Proposed Alternative Options
-```markdown
+````markdown
 {{PROPOSED_OPTIONS}}
-```
+````
 
 ### Reference Context Files
-```markdown
+````markdown
 {{CONTEXT_FILES}}
-```
+````
 
 {{#IF_ROUND_GREATER_THAN_1}}
 ### Prior Round Disagreements & Anonymized Digest
-```markdown
+````markdown
 {{ROUND_DIGEST}}
-```
+````
 
 ### Your Previous Round Ballot
-```json
+````json
 {{PREVIOUS_BALLOT}}
-```
+````
 {{/IF_ROUND_GREATER_THAN_1}}
 
 {{#IF_GUIDANCE}}
 ### 👤 Human Moderator Guidance & Arbitration
 The human operator has provided the following directive to steer this deliberation and unblock consensus:
-```markdown
+````markdown
 {{HUMAN_GUIDANCE}}
-```
-You MUST respect this directive in your evaluation, explain how your position aligns with it, and adjust your scores and stance accordingly.
+````
+You should incorporate this directive into your evaluation, respecting the operator's constraints while continuing to raise factual objections if following the directive introduces concrete runtime or architecture failure modes. If your position shifts based on this guidance, record it in `position_changes` with `cited_objection_ids: ["HUMAN_GUIDANCE"]`.
 {{/IF_GUIDANCE}}
 
 ---
@@ -144,9 +144,9 @@ When you declare `BLOCK` (or have critical reservations), you MUST raise one or 
 If this is Round > 1 and you changed your preferred option or stance:
 - `from_option`: Previous option (e.g., `"Option_B"`).
 - `to_option`: New option (e.g., `"Option_A"` or `"Option_0"`).
-- `cited_objection_ids`: Array of objection IDs from the digest that persuaded you (e.g., `["OBJ-1"]`).
-- `justification`: Rigorous explanation of why the evidence or counterargument altered your position.
-*(Note: Shifting stance without technical justification will be rejected by the Moderator as suspected conformity).*
+- `cited_objection_ids`: Array of objection IDs from the digest that persuaded you (e.g., `["OBJ-1"]`), or `["HUMAN_GUIDANCE"]` if adopting operator guidance.
+- `justification`: Rigorous explanation of why the evidence, counterargument, or operator guidance altered your position.
+*(Note: Shifting stance without technical justification or explicit citation will be rejected by the Moderator as suspected conformity).*
 
 ### Counter-Proposals (`counter_proposal`) — Required on BLOCK or when only Option 0 exists
 If your stance is `BLOCK`, or if only `Option_0` exists and you find it inadequate for production:
@@ -170,8 +170,8 @@ Conform strictly to the following schema without any trailing commas or malforme
   "round": {{ROUND}},
   "agent": "{{AGENT_NAME}}",
   "model": "{{MODEL}}",
-  "preferred_option": "Option_0",
-  "stance": "ACCEPT",
+  "preferred_option": "<SELECTED_OPTION_ID (e.g. Option_0, Option_A)>",
+  "stance": "<ACCEPT | ACCEPT_WITH_RESERVATIONS | BLOCK>",
   "metrics": {
     "technical_feasibility": {
       "score": 5,
