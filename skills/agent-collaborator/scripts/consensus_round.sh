@@ -227,6 +227,8 @@ if [ -f "$REPO_ROOT/templates/deliberation_prompt.md" ]; then
   TEMPLATE_FILE="$REPO_ROOT/templates/deliberation_prompt.md"
 elif [ -f "$SCRIPT_DIR/../../../templates/deliberation_prompt.md" ]; then
   TEMPLATE_FILE="$SCRIPT_DIR/../../../templates/deliberation_prompt.md"
+elif [ -f "$SCRIPT_DIR/../templates/deliberation_prompt.md" ]; then
+  TEMPLATE_FILE="$SCRIPT_DIR/../templates/deliberation_prompt.md"
 elif [ -f "${HOME}/.gemini/config/skills/agent-collaborator/templates/deliberation_prompt.md" ]; then
   TEMPLATE_FILE="${HOME}/.gemini/config/skills/agent-collaborator/templates/deliberation_prompt.md"
 fi
@@ -273,7 +275,7 @@ print(",".join(deduped))
 }
 
 LADDER_CLAUDE=$(build_model_ladder "${MODEL_CLAUDE_OPT:-${CLAUDE_MODEL:-}}" "${CLAUDE_MODEL_LADDER:-}" "sonnet,haiku")
-LADDER_CODEX=$(build_model_ladder "${MODEL_CODEX_OPT:-${CODEX_MODEL:-}}" "${CODEX_MODEL_LADDER:-}" "o3-mini,gpt-4o,default")
+LADDER_CODEX=$(build_model_ladder "${MODEL_CODEX_OPT:-${CODEX_MODEL:-}}" "${CODEX_MODEL_LADDER:-}" "gpt-5.6-luna,gpt-5.6-terra,o3-mini,default")
 
 # Load prior round outputs if Round > 1
 ROUND_DIGEST_CONTENT=""

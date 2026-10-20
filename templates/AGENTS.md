@@ -174,10 +174,14 @@ Each ballot also registers:
 ```bash
 # Full multi-round deliberation runner:
 agent-deliberate [--rounds 3] [--model-claude <model>] [--model-codex <model>] "<TOPIC_OR_REQUIREMENT>" [CONTEXT_FILES...]
+
+# Resuming / Continuing deliberation with steering guidance:
+agent-deliberate -c [--dir <DIR> | --id <ID>] [--guidance "<guidance_text>"] [--add-option "<json_or_title>"]
+
 # Example:
 agent-deliberate --rounds 3 "Design an in-memory cache strategy with TTL eviction for CLI tools"
+agent-deliberate -c --dir .agent/deliberations/dlb-20261020-abcd --guidance "Prioritize optimistic locking and lightweight repair"
 
 # Single-round concurrent driver (executes Claude and Codex concurrently):
 consensus-round [--max-rounds 3] [--model-claude <model>] [--model-codex <model>] <DELIBERATION_DIR> <ROUND_NUM>
-```
 ```

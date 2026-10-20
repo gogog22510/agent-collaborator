@@ -105,6 +105,10 @@ When facing major architectural trade-offs, conflicting implementation proposals
 agent-deliberate [OPTIONS] "<TOPIC_OR_REQUIREMENT>" [CONTEXT_FILES...]
 
 Options:
+  -c, --continue          Resume existing deliberation without clobbering completed rounds
+  --guidance <TEXT>       Inject human operator steering guidance into subsequent rounds
+  --guidance-file <FILE>  Inject human operator steering guidance from file
+  --add-option <OPT>      Register an additional candidate option in manifest
   -r, --rounds <N>        Maximum deliberation rounds (default: 3)
   --model-claude <M>      Model name for Claude CLI (e.g. sonnet, opus)
   --model-codex <M>       Model name for Codex CLI (e.g. o3-mini, o3)
@@ -113,8 +117,12 @@ Options:
   --jetski-evidence <F>   Empirical test / benchmark evidence file
   -h, --help              Show this help message
 
-# Example:
+# Examples:
+# Fresh deliberation:
 agent-deliberate --rounds 3 "Design an in-memory cache strategy with TTL eviction for CLI tools" context.md
+
+# Resume with human steering guidance after deadlock:
+agent-deliberate -c --dir .agent/deliberations/dlb-20261020-abcd --guidance "Prioritize optimistic locking and lightweight repair"
 
 # Single-round concurrent driver (executes Claude and Codex concurrently in isolated subshells):
 consensus-round [OPTIONS] <DELIBERATION_DIR> <ROUND_NUM>
@@ -123,6 +131,7 @@ Options:
   -r, --max-rounds <N>    Maximum rounds allowed (default: 3)
   --model-claude <M>      Model name for Claude CLI
   --model-codex <M>       Model name for Codex CLI
+  --guidance <TEXT>       Human guidance override for this round
 ```
 
 #### Deliberation Ledger Directory Structure

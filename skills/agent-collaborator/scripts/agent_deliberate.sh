@@ -1034,11 +1034,31 @@ echo "Status           : DEADLOCK"
 echo ""
 
 python3 -c '
-import sys, json
+import sys, json, os
 
-claude = json.load(open(sys.argv[1]))
-codex = json.load(open(sys.argv[2]))
-tally = json.load(open(sys.argv[3]))
+claude = {}
+if os.path.exists(sys.argv[1]):
+    try:
+        with open(sys.argv[1], "r", encoding="utf-8") as f:
+            claude = json.load(f)
+    except Exception:
+        pass
+
+codex = {}
+if os.path.exists(sys.argv[2]):
+    try:
+        with open(sys.argv[2], "r", encoding="utf-8") as f:
+            codex = json.load(f)
+    except Exception:
+        pass
+
+tally = {}
+if os.path.exists(sys.argv[3]):
+    try:
+        with open(sys.argv[3], "r", encoding="utf-8") as f:
+            tally = json.load(f)
+    except Exception:
+        pass
 
 c_p = claude.get("preferred_option", "Unknown")
 x_p = codex.get("preferred_option", "Unknown")
