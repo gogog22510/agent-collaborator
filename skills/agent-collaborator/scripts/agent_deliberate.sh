@@ -29,16 +29,21 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 MAX_ROUNDS=3
+ROUNDS_EXPLICIT=false
 MODEL_CLAUDE=""
 MODEL_CODEX=""
 DELIBERATION_ID=""
 DELIBERATION_DIR=""
 JETSKI_EVIDENCE_OPT=""
+IS_CONTINUATION=false
+GUIDANCE_TEXT=""
+ADD_OPTIONS=()
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -r|--rounds|--max-rounds)
+      ROUNDS_EXPLICIT=true
       if [[ -n "${2:-}" && "${2:-}" =~ ^[0-9]+$ ]]; then
         MAX_ROUNDS="$((10#$2))"
         if [ "$MAX_ROUNDS" -lt 1 ] || [ "$MAX_ROUNDS" -gt 10 ]; then
@@ -52,6 +57,7 @@ while [[ $# -gt 0 ]]; do
       fi
       ;;
     --rounds=*|--max-rounds=*)
+      ROUNDS_EXPLICIT=true
       RAW_ROUNDS="${1#*=}"
       if [[ "$RAW_ROUNDS" =~ ^[0-9]+$ ]]; then
         MAX_ROUNDS="$((10#$RAW_ROUNDS))"
@@ -63,6 +69,55 @@ while [[ $# -gt 0 ]]; do
         echo "Error: --rounds requires an integer argument between 1 and 10." >&2
         exit 1
       fi
+      shift
+      ;;
+    -c|--continue)
+      IS_CONTINUATION=true
+      shift
+      ;;
+    --guidance)
+      if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
+        GUIDANCE_TEXT="$2"
+        shift 2
+      else
+        echo "Error: --guidance requires a string argument." >&2
+        exit 1
+      fi
+      ;;
+    --guidance=*)
+      GUIDANCE_TEXT="${1#*=}"
+      shift
+      ;;
+    --guidance-file)
+      if [[ -n "${2:-}" && -f "$2" ]]; then
+        GUIDANCE_TEXT="$(cat "$2")"
+        shift 2
+      else
+        echo "Error: --guidance-file requires an existing file path." >&2
+        exit 1
+      fi
+      ;;
+    --guidance-file=*)
+      G_FILE="${1#*=}"
+      if [ -f "$G_FILE" ]; then
+        GUIDANCE_TEXT="$(cat "$G_FILE")"
+      else
+        echo "Error: --guidance-file requires an existing file path." >&2
+        exit 1
+      fi
+      shift
+      ;;
+    --add-option)
+      if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
+        ADD_OPTIONS+=("$2")
+        shift 2
+      else
+        echo "Error: --add-option requires an option description or JSON object." >&2
+        exit 1
+      fi
+      ;;
+    --add-option=*)
+      ADD_OPTIONS+=("${1#*=}")
       shift
       ;;
     --model-claude)
@@ -138,6 +193,10 @@ while [[ $# -gt 0 ]]; do
       echo "Usage: $0 [OPTIONS] \"<TOPIC_OR_REQUIREMENT>\" [CONTEXT_FILES...]"
       echo ""
       echo "Options:"
+      echo "  -c, --continue          Resume existing deliberation without clobbering completed rounds"
+      echo "  --guidance <TEXT>       Inject human operator steering guidance into subsequent rounds"
+      echo "  --guidance-file <FILE>  Inject human operator steering guidance from file"
+      echo "  --add-option <OPT>      Register an additional candidate option in manifest"
       echo "  -r, --rounds <N>        Maximum deliberation rounds (default: 3)"
       echo "  --model-claude <M>      Model name for Claude CLI (e.g. sonnet, opus)"
       echo "  --model-codex <M>       Model name for Codex CLI (e.g. o3-mini, o3)"
@@ -160,14 +219,16 @@ done
 
 set -- "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
 
-if [ "$#" -lt 1 ]; then
-  echo "Error: Missing required topic or requirement argument." >&2
-  echo "Usage: $0 [OPTIONS] \"<TOPIC_OR_REQUIREMENT>\" [CONTEXT_FILES...]" >&2
-  exit 1
+TOPIC=""
+if [ "$#" -ge 1 ]; then
+  if [ "$IS_CONTINUATION" = true ] && [ -z "$DELIBERATION_DIR" ] && [ -d "$1" ]; then
+    DELIBERATION_DIR="$1"
+    shift
+  else
+    TOPIC="$1"
+    shift
+  fi
 fi
-
-TOPIC="$1"
-shift
 
 # Validate and resolve context files to absolute paths
 RESOLVED_CONTEXT_FILES=()
@@ -181,38 +242,82 @@ for f in "$@"; do
 done
 CONTEXT_FILES=("${RESOLVED_CONTEXT_FILES[@]+"${RESOLVED_CONTEXT_FILES[@]}"}")
 
-# Resolve Deliberation ID
-if [ -z "$DELIBERATION_ID" ]; then
-  if [ -n "$DELIBERATION_DIR" ]; then
-    DELIBERATION_ID="$(basename "$DELIBERATION_DIR")"
-  else
-    HEX_SUFFIX=$(LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom 2>/dev/null | head -c 4 || true)
-    if [ -z "$HEX_SUFFIX" ]; then
-      HEX_SUFFIX=$(printf "%04x" "$((RANDOM % 65536))")
+# Resolve Deliberation Directory & ID based on mode
+if [ "$IS_CONTINUATION" = true ]; then
+  if [ -z "$DELIBERATION_DIR" ]; then
+    if [ -n "$DELIBERATION_ID" ]; then
+      if [ -d ".agent/deliberations/$DELIBERATION_ID" ]; then
+        DELIBERATION_DIR=".agent/deliberations/$DELIBERATION_ID"
+      elif [ -d "$REPO_ROOT/.agent/deliberations/$DELIBERATION_ID" ]; then
+        DELIBERATION_DIR="$REPO_ROOT/.agent/deliberations/$DELIBERATION_ID"
+      fi
+    else
+      LATEST_DIR=$(ls -td .agent/deliberations/*/ 2>/dev/null | head -n 1 || true)
+      if [ -n "$LATEST_DIR" ]; then
+        DELIBERATION_DIR="${LATEST_DIR%/}"
+      fi
     fi
-    DELIBERATION_ID="dlb-$(date +%Y%m%d)-$HEX_SUFFIX"
   fi
-fi
 
-# Resolve Deliberation Ledger Directory
-if [ -z "$DELIBERATION_DIR" ]; then
-  DELIBERATION_DIR=".agent/deliberations/$DELIBERATION_ID"
-fi
-
-mkdir -p "$DELIBERATION_DIR"
-DELIBERATION_DIR="$(cd "$DELIBERATION_DIR" && pwd)"
-
-# Initialize or update manifest.json
-MANIFEST_FILE="$DELIBERATION_DIR/manifest.json"
-CREATED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-
-# Prevent ID collision / silent topic reuse
-if [ -f "$MANIFEST_FILE" ]; then
-  EXISTING_TOPIC=$(jq -r '.topic // empty' "$MANIFEST_FILE" 2>/dev/null || true)
-  if [ -n "$EXISTING_TOPIC" ] && [ "$EXISTING_TOPIC" != "$TOPIC" ]; then
-    echo "Error: Deliberation directory '$DELIBERATION_DIR' already exists with a different topic: '$EXISTING_TOPIC'." >&2
-    echo "Please specify a unique --id or use a different directory." >&2
+  if [ -z "$DELIBERATION_DIR" ] || [ ! -d "$DELIBERATION_DIR" ]; then
+    echo "Error: Cannot continue: deliberation directory '$DELIBERATION_DIR' does not exist." >&2
     exit 1
+  fi
+
+  DELIBERATION_DIR="$(cd "$DELIBERATION_DIR" && pwd)"
+  MANIFEST_FILE="$DELIBERATION_DIR/manifest.json"
+
+  if [ ! -f "$MANIFEST_FILE" ]; then
+    echo "Error: Cannot continue: deliberation manifest not found at '$MANIFEST_FILE'." >&2
+    exit 1
+  fi
+
+  if [ -z "$TOPIC" ]; then
+    TOPIC=$(jq -r '.topic // empty' "$MANIFEST_FILE" 2>/dev/null || true)
+    if [ -z "$TOPIC" ]; then
+      TOPIC="Continued Deliberation"
+    fi
+  fi
+  if [ -z "$DELIBERATION_ID" ]; then
+    DELIBERATION_ID=$(jq -r '.deliberation_id // empty' "$MANIFEST_FILE" 2>/dev/null || true)
+    if [ -z "$DELIBERATION_ID" ]; then
+      DELIBERATION_ID="$(basename "$DELIBERATION_DIR")"
+    fi
+  fi
+else
+  if [ -z "$TOPIC" ]; then
+    echo "Error: Missing required topic or requirement argument." >&2
+    echo "Usage: $0 [OPTIONS] \"<TOPIC_OR_REQUIREMENT>\" [CONTEXT_FILES...]" >&2
+    exit 1
+  fi
+
+  if [ -z "$DELIBERATION_ID" ]; then
+    if [ -n "$DELIBERATION_DIR" ]; then
+      DELIBERATION_ID="$(basename "$DELIBERATION_DIR")"
+    else
+      HEX_SUFFIX=$(LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom 2>/dev/null | head -c 4 || true)
+      if [ -z "$HEX_SUFFIX" ]; then
+        HEX_SUFFIX=$(printf "%04x" "$((RANDOM % 65536))")
+      fi
+      DELIBERATION_ID="dlb-$(date +%Y%m%d)-$HEX_SUFFIX"
+    fi
+  fi
+
+  if [ -z "$DELIBERATION_DIR" ]; then
+    DELIBERATION_DIR=".agent/deliberations/$DELIBERATION_ID"
+  fi
+
+  mkdir -p "$DELIBERATION_DIR"
+  DELIBERATION_DIR="$(cd "$DELIBERATION_DIR" && pwd)"
+  MANIFEST_FILE="$DELIBERATION_DIR/manifest.json"
+
+  if [ -f "$MANIFEST_FILE" ]; then
+    EXISTING_TOPIC=$(jq -r '.topic // empty' "$MANIFEST_FILE" 2>/dev/null || true)
+    if [ -n "$EXISTING_TOPIC" ] && [ "$EXISTING_TOPIC" != "$TOPIC" ]; then
+      echo "Error: Deliberation directory '$DELIBERATION_DIR' already exists with a different topic: '$EXISTING_TOPIC'." >&2
+      echo "Please specify a unique --id or use a different directory." >&2
+      exit 1
+    fi
   fi
 fi
 
@@ -245,7 +350,7 @@ if [ ! -f "$MANIFEST_FILE" ]; then
       "status": "IN_PROGRESS"
     }' > "$MANIFEST_FILE"
 else
-  # Update existing manifest
+  # Update existing manifest (or initialize options if needed)
   jq \
     --arg id "$DELIBERATION_ID" \
     --arg topic "$TOPIC" \
@@ -263,6 +368,124 @@ else
       .
     end
     ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp" && mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
+fi
+
+# Ingest any manual options provided via --add-option
+if [ "${#ADD_OPTIONS[@]}" -gt 0 ]; then
+  python3 -c '
+import sys, json
+
+manifest_file = sys.argv[1]
+add_opts_raw = sys.argv[2:]
+
+with open(manifest_file, "r", encoding="utf-8") as f:
+    manifest = json.load(f)
+
+options = manifest.get("options", [])
+existing_ids = set()
+for o in options:
+    if isinstance(o, dict) and "id" in o:
+        existing_ids.add(o["id"])
+    elif isinstance(o, str):
+        existing_ids.add(o)
+
+letters = ["A", "B", "C", "D", "E", "F", "G", "H"]
+
+for raw in add_opts_raw:
+    raw_str = raw.strip()
+    try:
+        opt_obj = json.loads(raw_str)
+        if isinstance(opt_obj, dict):
+            if "id" not in opt_obj or not opt_obj["id"]:
+                for l in letters:
+                    cand = f"Option_{l}"
+                    if cand not in existing_ids:
+                        opt_obj["id"] = cand
+                        break
+            existing_ids.add(opt_obj["id"])
+            options.append(opt_obj)
+        else:
+            raise ValueError()
+    except Exception:
+        cand_id = "Option_Manual"
+        for l in letters:
+            cand = f"Option_{l}"
+            if cand not in existing_ids:
+                cand_id = cand
+                break
+        existing_ids.add(cand_id)
+        options.append({
+            "id": cand_id,
+            "title": raw_str,
+            "description": raw_str
+        })
+
+manifest["options"] = options
+with open(manifest_file, "w", encoding="utf-8") as f:
+    json.dump(manifest, f, indent=2)
+' "$MANIFEST_FILE" "${ADD_OPTIONS[@]}"
+fi
+
+# Detect highest completed round in directory
+HIGHEST_COMPLETED_ROUND=0
+for rdir in "$DELIBERATION_DIR"/round-*; do
+  if [ -d "$rdir" ]; then
+    r_tally="$rdir/tally.json"
+    if [ -f "$r_tally" ] && jq -e . "$r_tally" >/dev/null 2>&1; then
+      r_base="$(basename "$rdir")"
+      r_num="${r_base#round-}"
+      if [[ "$r_num" =~ ^[0-9]+$ ]] && [ "$r_num" -gt "$HIGHEST_COMPLETED_ROUND" ]; then
+        HIGHEST_COMPLETED_ROUND="$r_num"
+      fi
+    fi
+  fi
+done
+
+if [ "$IS_CONTINUATION" = true ]; then
+  START_ROUND=$((HIGHEST_COMPLETED_ROUND + 1))
+  MANIFEST_MAX=$(jq -r '.max_rounds // 3' "$MANIFEST_FILE" 2>/dev/null || echo 3)
+  PREV_STATUS=$(jq -r '.status // empty' "$MANIFEST_FILE" 2>/dev/null || true)
+
+  if [ "$PREV_STATUS" = "CONVERGED" ] || [ "$PREV_STATUS" = "CONVERGED_WITH_DISSENT" ]; then
+    if [ -z "$GUIDANCE_TEXT" ] && [ "${#ADD_OPTIONS[@]}" -eq 0 ]; then
+      echo "Deliberation $DELIBERATION_ID has already reached consensus in round $HIGHEST_COMPLETED_ROUND."
+      echo "Final Blueprint  : $DELIBERATION_DIR/final_blueprint.md"
+      exit 0
+    fi
+  fi
+
+  if [ "$ROUNDS_EXPLICIT" = false ]; then
+    if [ "$START_ROUND" -gt "$MANIFEST_MAX" ]; then
+      MAX_ROUNDS=$((START_ROUND + 1))
+    else
+      MAX_ROUNDS="$MANIFEST_MAX"
+    fi
+  else
+    if [ "$MAX_ROUNDS" -lt "$START_ROUND" ]; then
+      MAX_ROUNDS="$START_ROUND"
+    fi
+  fi
+
+  UPDATE_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  jq \
+    --arg status "IN_PROGRESS" \
+    --argjson mr "$MAX_ROUNDS" \
+    --arg ut "$UPDATE_TIME" \
+    '
+    .status = $status |
+    .max_rounds = $mr |
+    .continued_at = $ut
+    ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp" && mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
+else
+  START_ROUND=1
+fi
+
+# Ingest and persist guidance if provided
+if [ -n "$GUIDANCE_TEXT" ]; then
+  echo "$GUIDANCE_TEXT" > "$DELIBERATION_DIR/guidance.md"
+  mkdir -p "$DELIBERATION_DIR/round-$START_ROUND"
+  echo "$GUIDANCE_TEXT" > "$DELIBERATION_DIR/round-$START_ROUND/guidance.md"
+  jq --arg g "$GUIDANCE_TEXT" '.guidance = $g' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp" && mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
 fi
 
 # Create option_0_baseline.md if missing
@@ -613,7 +836,7 @@ with open(prompt_out, "w", encoding="utf-8") as f:
 FINAL_STATUS="IN_DEBATE"
 CONVERGED_ROUND=0
 
-for (( round=1; round<=MAX_ROUNDS; round++ )); do
+for (( round=START_ROUND; round<=MAX_ROUNDS; round++ )); do
   echo "=== Deliberation $DELIBERATION_ID: Executing Round $round of $MAX_ROUNDS ==="
 
   # Check if Jetski evidence is available to inject before this round (for round > 1)
@@ -647,6 +870,9 @@ for (( round=1; round<=MAX_ROUNDS; round++ )); do
   fi
   if [ -n "$MODEL_CODEX" ]; then
     DRIVER_ARGS+=(--model-codex "$MODEL_CODEX")
+  fi
+  if [ -n "$GUIDANCE_TEXT" ]; then
+    DRIVER_ARGS+=(--guidance "$GUIDANCE_TEXT")
   fi
 
   # Execute round driver

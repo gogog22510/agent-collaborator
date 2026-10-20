@@ -34,10 +34,10 @@ pwd >> "$MOCK_LOGS/consensus_round_cwd.txt"
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --max-rounds|-r|--model-claude|--model-codex)
+    --max-rounds|-r|--model-claude|--model-codex|--guidance|--guidance-file)
       shift 2
       ;;
-    --max-rounds=*|--model-claude=*|--model-codex=*)
+    --max-rounds=*|--model-claude=*|--model-codex=*|--guidance=*|--guidance-file=*)
       shift
       ;;
     *)
@@ -109,6 +109,68 @@ INNER
   "deliberation_id": "$(basename "$DELIB_DIR")",
   "round": $ROUND_NUM,
   "max_rounds": 3,
+  "status": "CONVERGED",
+  "consensus_option": "Option_0",
+  "yagni_score_avg": 5.0,
+  "score_spreads": {
+    "technical_feasibility": 0,
+    "architectural_simplicity": 0,
+    "yagni_and_parsimony": 0,
+    "robustness_failure_modes": 0,
+    "maintainability_testability": 0
+  },
+  "blocking_objections": [],
+  "over_architecture_flags": []
+}
+INNER
+
+elif [ "$SCENARIO" = "RESUME_CONVERGE" ]; then
+  if [ -f "$ROUND_DIR/guidance.md" ]; then
+    echo "GUIDANCE_FILE: $(cat "$ROUND_DIR/guidance.md")" >> "$MOCK_LOGS/guidance_seen.txt"
+  fi
+  cat <<INNER > "$ROUND_DIR/claude_ballot.json"
+{
+  "deliberation_id": "$(basename "$DELIB_DIR")",
+  "round": $ROUND_NUM,
+  "agent": "claude",
+  "preferred_option": "Option_0",
+  "stance": "ACCEPT",
+  "metrics": {
+    "technical_feasibility": {"score": 5, "confidence": 0.9, "rationale": "Direct POSIX utils"},
+    "architectural_simplicity": {"score": 5, "confidence": 0.95, "rationale": "No extra layers"},
+    "yagni_and_parsimony": {"score": 5, "confidence": 0.95, "cognitive_overhead": "LOW", "indirection_layers": 0, "rationale": "Zero overhead"},
+    "robustness_failure_modes": {"score": 4, "confidence": 0.85, "rationale": "Standard exits"},
+    "maintainability_testability": {"score": 5, "confidence": 0.9, "rationale": "Simple test harness"}
+  },
+  "over_architecture_flags": [],
+  "blocking_objections": [],
+  "position_changes": []
+}
+INNER
+  cat <<INNER > "$ROUND_DIR/codex_ballot.json"
+{
+  "deliberation_id": "$(basename "$DELIB_DIR")",
+  "round": $ROUND_NUM,
+  "agent": "codex",
+  "preferred_option": "Option_0",
+  "stance": "ACCEPT",
+  "metrics": {
+    "technical_feasibility": {"score": 5, "confidence": 0.9, "rationale": "Direct POSIX utils"},
+    "architectural_simplicity": {"score": 5, "confidence": 0.95, "rationale": "No extra layers"},
+    "yagni_and_parsimony": {"score": 5, "confidence": 0.95, "cognitive_overhead": "LOW", "indirection_layers": 0, "rationale": "Zero overhead"},
+    "robustness_failure_modes": {"score": 4, "confidence": 0.85, "rationale": "Standard exits"},
+    "maintainability_testability": {"score": 5, "confidence": 0.9, "rationale": "Simple test harness"}
+  },
+  "over_architecture_flags": [],
+  "blocking_objections": [],
+  "position_changes": []
+}
+INNER
+  cat <<INNER > "$ROUND_DIR/tally.json"
+{
+  "deliberation_id": "$(basename "$DELIB_DIR")",
+  "round": $ROUND_NUM,
+  "max_rounds": 5,
   "status": "CONVERGED",
   "consensus_option": "Option_0",
   "yagni_score_avg": 5.0,
@@ -600,6 +662,86 @@ LINK_CODE=$?
 eval "$SET_E"
 [ "$LINK_CODE" -eq 0 ] || { echo "FAIL: Symlink execution failed with exit $LINK_CODE: $LINK_OUT" >&2; exit 1; }
 echo "PASS: Symlink execution verified."
+
+echo "=== Test 8: Session Continuation (-c / --continue) with Guidance ==="
+TEST8_DIR="$TEMP_DIR/test8_delib"
+mkdir -p "$TEST8_DIR/round-1" "$TEST8_DIR/round-2" "$TEST8_DIR/round-3"
+
+cat <<'EOF' > "$TEST8_DIR/manifest.json"
+{
+  "deliberation_id": "test8_delib",
+  "topic": "Resilience and Continuation",
+  "created_at": "2026-10-20T00:00:00Z",
+  "max_rounds": 3,
+  "options": [
+    {"id": "Option_0", "name": "Option 0", "description": "Baseline"}
+  ],
+  "status": "DEADLOCK",
+  "deadlock_round": 3
+}
+EOF
+
+for r in 1 2 3; do
+  echo "{\"round\": $r, \"status\": \"IN_DEBATE\"}" > "$TEST8_DIR/round-$r/tally.json"
+  echo "{\"round\": $r, \"agent\": \"claude\"}" > "$TEST8_DIR/round-$r/claude_ballot.json"
+  echo "{\"round\": $r, \"agent\": \"codex\"}" > "$TEST8_DIR/round-$r/codex_ballot.json"
+done
+# Round 3 tally is DEADLOCK
+echo "{\"round\": 3, \"status\": \"DEADLOCK\"}" > "$TEST8_DIR/round-3/tally.json"
+
+R1_TALLY_ORIG="$(cat "$TEST8_DIR/round-1/tally.json")"
+R2_TALLY_ORIG="$(cat "$TEST8_DIR/round-2/tally.json")"
+R3_TALLY_ORIG="$(cat "$TEST8_DIR/round-3/tally.json")"
+
+export MOCK_SCENARIO="RESUME_CONVERGE"
+
+OUTPUT8=$(bash "$DELIBERATE_SCRIPT" -c --dir "$TEST8_DIR" --guidance "Prioritize optimistic locking and lightweight repair" --rounds 5)
+EXIT8=$?
+
+[ "$EXIT8" -eq 0 ] || { echo "FAIL: Test 8 continuation failed with exit $EXIT8: $OUTPUT8" >&2; exit 1; }
+
+# Verify rounds 1-3 were not clobbered
+[ "$(cat "$TEST8_DIR/round-1/tally.json")" = "$R1_TALLY_ORIG" ] || { echo "FAIL: round-1 was modified" >&2; exit 1; }
+[ "$(cat "$TEST8_DIR/round-2/tally.json")" = "$R2_TALLY_ORIG" ] || { echo "FAIL: round-2 was modified" >&2; exit 1; }
+[ "$(cat "$TEST8_DIR/round-3/tally.json")" = "$R3_TALLY_ORIG" ] || { echo "FAIL: round-3 was modified" >&2; exit 1; }
+
+# Verify round 4 was executed and converged
+[ -f "$TEST8_DIR/round-4/tally.json" ] || { echo "FAIL: round-4 was not created" >&2; exit 1; }
+[ "$(jq -r .status "$TEST8_DIR/round-4/tally.json")" = "CONVERGED" ] || { echo "FAIL: round-4 not CONVERGED" >&2; exit 1; }
+
+# Verify guidance was written to round-4/guidance.md
+[ -f "$TEST8_DIR/round-4/guidance.md" ] || { echo "FAIL: round-4/guidance.md not found" >&2; exit 1; }
+grep -q "optimistic locking" "$TEST8_DIR/round-4/guidance.md" || { echo "FAIL: guidance content missing in round-4" >&2; exit 1; }
+
+# Verify final blueprint exists
+[ -f "$TEST8_DIR/final_blueprint.md" ] || { echo "FAIL: final_blueprint.md not generated after continuation" >&2; exit 1; }
+
+# Verify manifest status updated to CONVERGED
+M8_STATUS=$(jq -r .status "$TEST8_DIR/manifest.json")
+[ "$M8_STATUS" = "CONVERGED" ] || { echo "FAIL: manifest status is $M8_STATUS, expected CONVERGED" >&2; exit 1; }
+
+echo "PASS: Test 8 - Session continuation with guidance verified."
+
+echo "=== Test 9: Continuation without explicit topic (inferred from manifest) ==="
+OUTPUT9=$(bash "$DELIBERATE_SCRIPT" --continue --dir "$TEST8_DIR" 2>&1)
+EXIT9=$?
+[ "$EXIT9" -eq 0 ] || { echo "FAIL: Test 9 failed with exit $EXIT9: $OUTPUT9" >&2; exit 1; }
+echo "PASS: Test 9 - Continuation without explicit topic verified."
+
+echo "=== Test 10: --add-option Registration ==="
+TEST10_DIR="$TEMP_DIR/test10_delib"
+mkdir -p "$TEST10_DIR"
+cat <<'EOF' > "$TEST10_DIR/manifest.json"
+{
+  "deliberation_id": "test10_delib",
+  "topic": "Add Option Test",
+  "options": [{"id": "Option_0", "description": "Baseline"}]
+}
+EOF
+OUTPUT10=$(bash "$DELIBERATE_SCRIPT" -c --dir "$TEST10_DIR" --add-option '{"id": "Option_Manual", "title": "Manual Patch", "description": "Hand-crafted patch"}' --rounds 1 2>&1 || true)
+M10_HAS_MANUAL=$(jq -e '.options[] | select(.id == "Option_Manual")' "$TEST10_DIR/manifest.json" || true)
+[ -n "$M10_HAS_MANUAL" ] || { echo "FAIL: Option_Manual not found in manifest" >&2; exit 1; }
+echo "PASS: Test 10 - Add option verified."
 
 echo "All agent_deliberate tests passed successfully!"
 

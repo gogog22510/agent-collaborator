@@ -25,6 +25,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." 2>/dev/null && pwd || pwd)"
 MAX_ROUNDS_OPT=""
 MODEL_CLAUDE_OPT=""
 MODEL_CODEX_OPT=""
+CLI_GUIDANCE=""
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -66,6 +67,38 @@ while [[ $# -gt 0 ]]; do
       ;;
     --model-codex=*)
       MODEL_CODEX_OPT="${1#*=}"
+      shift
+      ;;
+    --guidance)
+      if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
+        CLI_GUIDANCE="$2"
+        shift 2
+      else
+        echo "Error: --guidance requires a string argument." >&2
+        exit 1
+      fi
+      ;;
+    --guidance=*)
+      CLI_GUIDANCE="${1#*=}"
+      shift
+      ;;
+    --guidance-file)
+      if [[ -n "${2:-}" && -f "$2" ]]; then
+        CLI_GUIDANCE="$(cat "$2")"
+        shift 2
+      else
+        echo "Error: --guidance-file requires an existing file path." >&2
+        exit 1
+      fi
+      ;;
+    --guidance-file=*)
+      G_FILE="${1#*=}"
+      if [ -f "$G_FILE" ]; then
+        CLI_GUIDANCE="$(cat "$G_FILE")"
+      else
+        echo "Error: --guidance-file requires an existing file path." >&2
+        exit 1
+      fi
       shift
       ;;
     -h|--help)
@@ -263,7 +296,12 @@ fi
 
 # Load human guidance if provided for this round or deliberation
 HUMAN_GUIDANCE_CONTENT=""
-if [ -f "$ROUND_DIR/guidance.md" ]; then
+if [ -n "$CLI_GUIDANCE" ]; then
+  HUMAN_GUIDANCE_CONTENT="$CLI_GUIDANCE"
+  if [ ! -f "$ROUND_DIR/guidance.md" ]; then
+    echo "$CLI_GUIDANCE" > "$ROUND_DIR/guidance.md"
+  fi
+elif [ -f "$ROUND_DIR/guidance.md" ]; then
   HUMAN_GUIDANCE_CONTENT="$(cat "$ROUND_DIR/guidance.md")"
 elif [ -f "$DELIBERATION_DIR/guidance.md" ]; then
   HUMAN_GUIDANCE_CONTENT="$(cat "$DELIBERATION_DIR/guidance.md")"
