@@ -36,6 +36,15 @@ if [ "$MODE" = "FAIL_126" ]; then
 elif [ "$MODE" = "FAIL_100" ]; then
   echo "Rate limit reached" >&2
   exit 100
+elif [ "$MODE" = "LADDER_TEST" ]; then
+  CURRENT_ARGS="$*"
+  if [[ "$CURRENT_ARGS" =~ "--model haiku" ]]; then
+    # Fallback model succeeds
+    MODE="ACCEPT_OPTION_0"
+  else
+    echo "Rate limit exceeded (429)" >&2
+    exit 1
+  fi
 fi
 
 # Simulate concurrent work
@@ -92,6 +101,15 @@ if [ "$MODE" = "FAIL_126" ]; then
 elif [ "$MODE" = "FAIL_100" ]; then
   echo "Rate limit reached" >&2
   exit 100
+elif [ "$MODE" = "LADDER_TEST" ]; then
+  CURRENT_ARGS="$*"
+  if [[ "$CURRENT_ARGS" =~ "--model gpt-4o" ]] || [[ "$CURRENT_ARGS" =~ "--model default" ]]; then
+    # Fallback model succeeds
+    MODE="CONVERGE_OPTION_0"
+  else
+    echo "ERROR: 400 Invalid model" >&2
+    exit 1
+  fi
 fi
 
 # Simulate concurrent work
@@ -442,5 +460,53 @@ if [ "$EXIT_MISSING_MANIFEST" -ne 1 ]; then
   exit 1
 fi
 echo "PASS: Missing manifest failure verified."
+
+echo "=== Test 8: Model Fallback Ladder (Retry on 429/400 and succeed on fallback rung) ==="
+DELIB_DIR8="$TEMP_DIR/delib_test8"
+MOCK_LOG_DIR8="$TEMP_DIR/logs8"
+mkdir -p "$DELIB_DIR8" "$MOCK_LOG_DIR8"
+
+cat <<'EOF' > "$DELIB_DIR8/manifest.json"
+{
+  "deliberation_id": "test-dlb-08",
+  "topic": "Fallback Ladder Test",
+  "options": [{"id": "Option_0", "description": "Option 0"}]
+}
+EOF
+
+export MOCK_LOG_DIR="$MOCK_LOG_DIR8"
+export MOCK_CLAUDE_MODE="LADDER_TEST"
+export MOCK_CODEX_MODE="LADDER_TEST"
+
+bash "$ROUND_SCRIPT" "$DELIB_DIR8" 1
+
+if [ ! -s "$DELIB_DIR8/round-1/claude_ballot.json" ]; then
+  echo "FAIL: Claude ballot missing after fallback ladder" >&2
+  exit 1
+fi
+if [ ! -s "$DELIB_DIR8/round-1/codex_ballot.json" ]; then
+  echo "FAIL: Codex ballot missing after fallback ladder" >&2
+  exit 1
+fi
+
+META_FILE="$DELIB_DIR8/round-1/meta.json"
+if [ ! -f "$META_FILE" ]; then
+  echo "FAIL: round-1/meta.json missing" >&2
+  exit 1
+fi
+
+CLAUDE_MODEL_USED=$(jq -r '.claude.model_used' "$META_FILE")
+CODEX_MODEL_USED=$(jq -r '.codex.model_used' "$META_FILE")
+
+if [ "$CLAUDE_MODEL_USED" != "haiku" ]; then
+  echo "FAIL: Expected Claude to fallback to haiku, got $CLAUDE_MODEL_USED" >&2
+  exit 1
+fi
+if [ "$CODEX_MODEL_USED" != "gpt-4o" ] && [ "$CODEX_MODEL_USED" != "default" ]; then
+  echo "FAIL: Expected Codex to fallback to gpt-4o or default, got $CODEX_MODEL_USED" >&2
+  exit 1
+fi
+
+echo "PASS: Model fallback ladder verified."
 
 echo "All consensus_round tests passed successfully!"

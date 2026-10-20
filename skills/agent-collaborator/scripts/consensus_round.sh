@@ -213,9 +213,34 @@ SESSION_CLAUDE="$DELIBERATION_DIR/.sessions/claude"
 SESSION_CODEX="$DELIBERATION_DIR/.sessions/codex"
 mkdir -p "$SESSION_CLAUDE" "$SESSION_CODEX"
 
-# Model selection
-MODEL_CLAUDE="${MODEL_CLAUDE_OPT:-${CLAUDE_MODEL:-${AGENT_MODEL:-sonnet}}}"
-MODEL_CODEX="${MODEL_CODEX_OPT:-${CODEX_MODEL:-${AGENT_MODEL:-o3-mini}}}"
+# Helper function to build deduplicated model ladder
+build_model_ladder() {
+  local specified="$1"
+  local env_ladder="$2"
+  local defaults="$3"
+  local raw=""
+  if [ -n "$env_ladder" ]; then
+    raw="$env_ladder"
+  elif [ -n "$specified" ]; then
+    raw="$specified,$defaults"
+  else
+    raw="$defaults"
+  fi
+  python3 -c '
+import sys
+rungs = [r.strip() for r in sys.argv[1].split(",") if r.strip()]
+seen = set()
+deduped = []
+for r in rungs:
+    if r not in seen:
+        seen.add(r)
+        deduped.append(r)
+print(",".join(deduped))
+' "$raw"
+}
+
+LADDER_CLAUDE=$(build_model_ladder "${MODEL_CLAUDE_OPT:-${CLAUDE_MODEL:-}}" "${CLAUDE_MODEL_LADDER:-}" "sonnet,haiku")
+LADDER_CODEX=$(build_model_ladder "${MODEL_CODEX_OPT:-${CODEX_MODEL:-}}" "${CODEX_MODEL_LADDER:-}" "o3-mini,gpt-4o,default")
 
 # Load prior round outputs if Round > 1
 ROUND_DIGEST_CONTENT=""
@@ -236,144 +261,13 @@ if [ "$ROUND_NUM" -gt 1 ]; then
   fi
 fi
 
-# Function to render prompt from template
-render_prompt() {
-  local agent_name="$1"
-  local model_name="$2"
-  local prev_ballot="$3"
-  local out_file="$4"
-
-  python3 -c '
-import sys, json, re
-
-template_path = sys.argv[1]
-out_path = sys.argv[2]
-agent_name = sys.argv[3]
-model_name = sys.argv[4]
-delib_id = sys.argv[5]
-round_num = int(sys.argv[6])
-req = sys.argv[7]
-opt0 = sys.argv[8]
-prop_opts = sys.argv[9]
-ctx_files = sys.argv[10]
-digest = sys.argv[11]
-prev_ballot = sys.argv[12]
-
-if template_path and template_path != "":
-    with open(template_path, "r", encoding="utf-8") as f:
-        content = f.read()
-else:
-    content = """# Deliberation Prompt
-Deliberation ID: {{DELIBERATION_ID}}
-Round: {{ROUND}}
-Agent: {{AGENT_NAME}}
-Model: {{MODEL}}
-
-Topic:
-{{REQUIREMENT}}
-
-Option 0:
-{{OPTION_0_BASELINE}}
-
-Proposed Options:
-{{PROPOSED_OPTIONS}}
-
-Context Files:
-{{CONTEXT_FILES}}
-
-{{#IF_ROUND_GREATER_THAN_1}}
-Prior Digest:
-{{ROUND_DIGEST}}
-
-Your Previous Ballot:
-{{PREVIOUS_BALLOT}}
-{{/IF_ROUND_GREATER_THAN_1}}
-"""
-
-if round_num > 1:
-    content = re.sub(r"\{\{#IF_ROUND_GREATER_THAN_1\}\}([\s\S]*?)\{\{/IF_ROUND_GREATER_THAN_1\}\}", r"\1", content)
-else:
-    content = re.sub(r"\{\{#IF_ROUND_GREATER_THAN_1\}\}[\s\S]*?\{\{/IF_ROUND_GREATER_THAN_1\}\}", "", content)
-
-subs = {
-    "DELIBERATION_ID": delib_id,
-    "ROUND": str(round_num),
-    "AGENT_NAME": agent_name,
-    "MODEL": model_name,
-    "REQUIREMENT": req,
-    "OPTION_0_BASELINE": opt0,
-    "PROPOSED_OPTIONS": prop_opts,
-    "CONTEXT_FILES": ctx_files,
-    "ROUND_DIGEST": digest,
-    "PREVIOUS_BALLOT": prev_ballot
-}
-
-for k, v in subs.items():
-    content = content.replace("{{" + k + "}}", v)
-
-with open(out_path, "w", encoding="utf-8") as f:
-    f.write(content)
-' "$TEMPLATE_FILE" "$out_file" "$agent_name" "$model_name" "$DELIBERATION_ID" "$ROUND_NUM" \
-  "$TOPIC" "$OPTION_0_BASELINE" "$PROPOSED_OPTIONS" "$CONTEXT_FILES_STR" "$ROUND_DIGEST_CONTENT" "$prev_ballot"
-}
-
-PROMPT_CLAUDE_FILE=$(mktemp)
-PROMPT_CODEX_FILE=$(mktemp)
-render_prompt "claude" "$MODEL_CLAUDE" "$PRIOR_CLAUDE_BALLOT_CONTENT" "$PROMPT_CLAUDE_FILE"
-render_prompt "codex" "$MODEL_CODEX" "$PRIOR_CODEX_BALLOT_CONTENT" "$PROMPT_CODEX_FILE"
-
-# Prepare execution commands and arguments
-CLAUDE_ARGS=()
-if [ -n "$MODEL_CLAUDE" ]; then
-  CLAUDE_ARGS=(--model "$MODEL_CLAUDE")
+# Load human guidance if provided for this round or deliberation
+HUMAN_GUIDANCE_CONTENT=""
+if [ -f "$ROUND_DIR/guidance.md" ]; then
+  HUMAN_GUIDANCE_CONTENT="$(cat "$ROUND_DIR/guidance.md")"
+elif [ -f "$DELIBERATION_DIR/guidance.md" ]; then
+  HUMAN_GUIDANCE_CONTENT="$(cat "$DELIBERATION_DIR/guidance.md")"
 fi
-
-CODEX_ARGS=()
-if [ -n "$MODEL_CODEX" ]; then
-  CODEX_ARGS=(--model "$MODEL_CODEX")
-fi
-
-TEMP_CLAUDE_OUT=$(mktemp)
-TEMP_CLAUDE_ERR=$(mktemp)
-TEMP_CODEX_OUT=$(mktemp)
-TEMP_CODEX_ERR=$(mktemp)
-
-cleanup_temps() {
-  rm -f "$PROMPT_CLAUDE_FILE" "$PROMPT_CODEX_FILE" "$TEMP_CLAUDE_OUT" "$TEMP_CLAUDE_ERR" "$TEMP_CODEX_OUT" "$TEMP_CODEX_ERR"
-}
-trap cleanup_temps EXIT
-
-# Concurrently dispatch Claude and Codex in isolated session directories
-echo "Starting concurrent round $ROUND_NUM evaluations for deliberation $DELIBERATION_ID..."
-
-(
-  cd "$SESSION_CLAUDE"
-  cat "$PROMPT_CLAUDE_FILE" | claude ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"} -p --tools "" > "$TEMP_CLAUDE_OUT" 2> "$TEMP_CLAUDE_ERR"
-) &
-PID_CLAUDE=$!
-
-(
-  cd "$SESSION_CODEX"
-  cat "$PROMPT_CODEX_FILE" | codex exec --sandbox read-only ${CODEX_ARGS[@]+"${CODEX_ARGS[@]}"} --skip-git-repo-check - > "$TEMP_CODEX_OUT" 2> "$TEMP_CODEX_ERR"
-) &
-PID_CODEX=$!
-
-EXIT_CLAUDE=0
-wait "$PID_CLAUDE" || EXIT_CLAUDE=$?
-
-EXIT_CODEX=0
-wait "$PID_CODEX" || EXIT_CODEX=$?
-
-# Check for sandbox blocking (Exit 126)
-if [ "$EXIT_CLAUDE" -eq 126 ] || [ "$EXIT_CODEX" -eq 126 ]; then
-  echo "❌ [SANDBOX_BLOCKED: BypassSandbox=true REQUIRED]" >&2
-  echo "Reason: Sandbox execution blocked or permission denied (Exit: 126)." >&2
-  exit 126
-fi
-
-# Save full markdown output
-cat "$TEMP_CLAUDE_OUT" > "$ROUND_DIR/claude_ballot.md"
-cat "$TEMP_CODEX_OUT" > "$ROUND_DIR/codex_ballot.md"
 
 # Function to extract fenced JSON ballot
 extract_json_ballot() {
@@ -449,8 +343,290 @@ if not found:
   return 1
 }
 
-extract_json_ballot "$TEMP_CLAUDE_OUT" "$ROUND_DIR/claude_ballot.json" || true
-extract_json_ballot "$TEMP_CODEX_OUT" "$ROUND_DIR/codex_ballot.json" || true
+# Function to render prompt from template
+render_prompt() {
+  local agent_name="$1"
+  local model_name="$2"
+  local prev_ballot="$3"
+  local guidance="$4"
+  local out_file="$5"
+
+  python3 -c '
+import sys, json, re
+
+template_path = sys.argv[1]
+out_path = sys.argv[2]
+agent_name = sys.argv[3]
+model_name = sys.argv[4]
+delib_id = sys.argv[5]
+round_num = int(sys.argv[6])
+req = sys.argv[7]
+opt0 = sys.argv[8]
+prop_opts = sys.argv[9]
+ctx_files = sys.argv[10]
+digest = sys.argv[11]
+prev_ballot = sys.argv[12]
+guidance = sys.argv[13]
+
+if template_path and template_path != "":
+    with open(template_path, "r", encoding="utf-8") as f:
+        content = f.read()
+else:
+    content = """# Deliberation Prompt
+Deliberation ID: {{DELIBERATION_ID}}
+Round: {{ROUND}}
+Agent: {{AGENT_NAME}}
+Model: {{MODEL}}
+
+Topic:
+{{REQUIREMENT}}
+
+Option 0:
+{{OPTION_0_BASELINE}}
+
+Proposed Options:
+{{PROPOSED_OPTIONS}}
+
+Context Files:
+{{CONTEXT_FILES}}
+
+{{#IF_ROUND_GREATER_THAN_1}}
+Prior Digest:
+{{ROUND_DIGEST}}
+
+Your Previous Ballot:
+{{PREVIOUS_BALLOT}}
+{{/IF_ROUND_GREATER_THAN_1}}
+"""
+
+if round_num > 1:
+    content = re.sub(r"\{\{#IF_ROUND_GREATER_THAN_1\}\}([\s\S]*?)\{\{/IF_ROUND_GREATER_THAN_1\}\}", r"\1", content)
+else:
+    content = re.sub(r"\{\{#IF_ROUND_GREATER_THAN_1\}\}[\s\S]*?\{\{/IF_ROUND_GREATER_THAN_1\}\}", "", content)
+
+if guidance and guidance.strip() != "":
+    content = re.sub(r"\{\{#IF_GUIDANCE\}\}([\s\S]*?)\{\{/IF_GUIDANCE\}\}", r"\1", content)
+    content = content.replace("{{HUMAN_GUIDANCE}}", guidance)
+else:
+    content = re.sub(r"\{\{#IF_GUIDANCE\}\}[\s\S]*?\{\{/IF_GUIDANCE\}\}", "", content)
+
+subs = {
+    "DELIBERATION_ID": delib_id,
+    "ROUND": str(round_num),
+    "AGENT_NAME": agent_name,
+    "MODEL": model_name,
+    "REQUIREMENT": req,
+    "OPTION_0_BASELINE": opt0,
+    "PROPOSED_OPTIONS": prop_opts,
+    "CONTEXT_FILES": ctx_files,
+    "ROUND_DIGEST": digest,
+    "PREVIOUS_BALLOT": prev_ballot
+}
+
+for k, v in subs.items():
+    content = content.replace("{{" + k + "}}", v)
+
+with open(out_path, "w", encoding="utf-8") as f:
+    f.write(content)
+' "$TEMPLATE_FILE" "$out_file" "$agent_name" "$model_name" "$DELIBERATION_ID" "$ROUND_NUM" \
+  "$TOPIC" "$OPTION_0_BASELINE" "$PROPOSED_OPTIONS" "$CONTEXT_FILES_STR" "$ROUND_DIGEST_CONTENT" "$prev_ballot" "$guidance"
+}
+
+META_CLAUDE_FILE=$(mktemp)
+META_CODEX_FILE=$(mktemp)
+
+cleanup_temps() {
+  rm -f "$META_CLAUDE_FILE" "$META_CODEX_FILE"
+}
+trap cleanup_temps EXIT
+
+# Concurrently dispatch Claude and Codex with fallback ladder in isolated session directories
+echo "Starting concurrent round $ROUND_NUM evaluations for deliberation $DELIBERATION_ID..."
+
+(
+  cd "$SESSION_CLAUDE"
+  IFS=',' read -ra rungs <<< "$LADDER_CLAUDE"
+  attempts="[]"
+  for m in "${rungs[@]}"; do
+    prompt_file=$(mktemp)
+    render_prompt "claude" "$m" "$PRIOR_CLAUDE_BALLOT_CONTENT" "$HUMAN_GUIDANCE_CONTENT" "$prompt_file"
+    m_args=()
+    if [ "$m" != "default" ]; then
+      m_args=(--model "$m")
+    fi
+    out_file=$(mktemp)
+    err_file=$(mktemp)
+    rc=0
+    cat "$prompt_file" | claude ${m_args[@]+"${m_args[@]}"} -p --tools "" > "$out_file" 2> "$err_file" || rc=$?
+    rm -f "$prompt_file"
+
+    if [ "$rc" -eq 126 ]; then
+      echo "❌ [SANDBOX_BLOCKED: BypassSandbox=true REQUIRED]" >&2
+      cat "$err_file" >&2
+      rm -f "$out_file" "$err_file"
+      exit 126
+    fi
+
+    extracted=false
+    if [ "$rc" -eq 0 ] || [ -s "$out_file" ]; then
+      if extract_json_ballot "$out_file" "$ROUND_DIR/claude_ballot.json"; then
+        extracted=true
+      fi
+    fi
+
+    if [ "$extracted" = true ]; then
+      cat "$out_file" > "$ROUND_DIR/claude_ballot.md"
+      attempts=$(python3 -c '
+import sys, json
+att = json.loads(sys.argv[1])
+att.append({"model": sys.argv[2], "exit_code": int(sys.argv[3]), "status": "SUCCESS"})
+print(json.dumps(att))
+' "$attempts" "$m" "$rc")
+      python3 -c '
+import sys, json
+meta = {"model_used": sys.argv[1], "attempts": json.loads(sys.argv[2])}
+with open(sys.argv[3], "w") as f:
+    json.dump(meta, f, indent=2)
+' "$m" "$attempts" "$META_CLAUDE_FILE"
+      rm -f "$out_file" "$err_file"
+      exit 0
+    else
+      err_msg=$(head -n 5 "$err_file" | tr '\n' ' ' | head -c 200)
+      attempts=$(python3 -c '
+import sys, json
+att = json.loads(sys.argv[1])
+att.append({"model": sys.argv[2], "exit_code": int(sys.argv[3]), "status": "FAILED", "error": sys.argv[4]})
+print(json.dumps(att))
+' "$attempts" "$m" "$rc" "$err_msg")
+    fi
+    rm -f "$out_file" "$err_file"
+  done
+
+  python3 -c '
+import sys, json
+meta = {"model_used": None, "attempts": json.loads(sys.argv[1])}
+with open(sys.argv[2], "w") as f:
+    json.dump(meta, f, indent=2)
+' "$attempts" "$META_CLAUDE_FILE"
+  exit 1
+) &
+PID_CLAUDE=$!
+
+(
+  cd "$SESSION_CODEX"
+  IFS=',' read -ra rungs <<< "$LADDER_CODEX"
+  attempts="[]"
+  for m in "${rungs[@]}"; do
+    prompt_file=$(mktemp)
+    render_prompt "codex" "$m" "$PRIOR_CODEX_BALLOT_CONTENT" "$HUMAN_GUIDANCE_CONTENT" "$prompt_file"
+    m_args=()
+    if [ "$m" != "default" ]; then
+      m_args=(--model "$m")
+    fi
+    out_file=$(mktemp)
+    err_file=$(mktemp)
+    rc=0
+    cat "$prompt_file" | codex exec --sandbox read-only ${m_args[@]+"${m_args[@]}"} --skip-git-repo-check - > "$out_file" 2> "$err_file" || rc=$?
+    rm -f "$prompt_file"
+
+    if [ "$rc" -eq 126 ]; then
+      echo "❌ [SANDBOX_BLOCKED: BypassSandbox=true REQUIRED]" >&2
+      cat "$err_file" >&2
+      rm -f "$out_file" "$err_file"
+      exit 126
+    fi
+
+    extracted=false
+    if [ "$rc" -eq 0 ] || [ -s "$out_file" ]; then
+      if extract_json_ballot "$out_file" "$ROUND_DIR/codex_ballot.json"; then
+        extracted=true
+      fi
+    fi
+
+    if [ "$extracted" = true ]; then
+      cat "$out_file" > "$ROUND_DIR/codex_ballot.md"
+      attempts=$(python3 -c '
+import sys, json
+att = json.loads(sys.argv[1])
+att.append({"model": sys.argv[2], "exit_code": int(sys.argv[3]), "status": "SUCCESS"})
+print(json.dumps(att))
+' "$attempts" "$m" "$rc")
+      python3 -c '
+import sys, json
+meta = {"model_used": sys.argv[1], "attempts": json.loads(sys.argv[2])}
+with open(sys.argv[3], "w") as f:
+    json.dump(meta, f, indent=2)
+' "$m" "$attempts" "$META_CODEX_FILE"
+      rm -f "$out_file" "$err_file"
+      exit 0
+    else
+      err_msg=$(head -n 5 "$err_file" | tr '\n' ' ' | head -c 200)
+      attempts=$(python3 -c '
+import sys, json
+att = json.loads(sys.argv[1])
+att.append({"model": sys.argv[2], "exit_code": int(sys.argv[3]), "status": "FAILED", "error": sys.argv[4]})
+print(json.dumps(att))
+' "$attempts" "$m" "$rc" "$err_msg")
+    fi
+    rm -f "$out_file" "$err_file"
+  done
+
+  python3 -c '
+import sys, json
+meta = {"model_used": None, "attempts": json.loads(sys.argv[1])}
+with open(sys.argv[2], "w") as f:
+    json.dump(meta, f, indent=2)
+' "$attempts" "$META_CODEX_FILE"
+  exit 1
+) &
+PID_CODEX=$!
+
+EXIT_CLAUDE=0
+wait "$PID_CLAUDE" || EXIT_CLAUDE=$?
+
+EXIT_CODEX=0
+wait "$PID_CODEX" || EXIT_CODEX=$?
+
+# Check for sandbox blocking (Exit 126)
+if [ "$EXIT_CLAUDE" -eq 126 ] || [ "$EXIT_CODEX" -eq 126 ]; then
+  echo "❌ [SANDBOX_BLOCKED: BypassSandbox=true REQUIRED]" >&2
+  echo "Reason: Sandbox execution blocked or permission denied (Exit: 126)." >&2
+  exit 126
+fi
+
+# Assemble meta.json
+python3 -c '
+import sys, json, os
+
+delib_id = sys.argv[1]
+round_num = int(sys.argv[2])
+c_file = sys.argv[3]
+x_file = sys.argv[4]
+out_file = sys.argv[5]
+
+claude_meta = {"model_used": None, "attempts": []}
+if os.path.exists(c_file) and os.path.getsize(c_file) > 0:
+    try:
+        claude_meta = json.load(open(c_file))
+    except Exception:
+        pass
+
+codex_meta = {"model_used": None, "attempts": []}
+if os.path.exists(x_file) and os.path.getsize(x_file) > 0:
+    try:
+        codex_meta = json.load(open(x_file))
+    except Exception:
+        pass
+
+meta = {
+    "deliberation_id": delib_id,
+    "round": round_num,
+    "claude": claude_meta,
+    "codex": codex_meta
+}
+with open(out_file, "w") as f:
+    json.dump(meta, f, indent=2)
+' "$DELIBERATION_ID" "$ROUND_NUM" "$META_CLAUDE_FILE" "$META_CODEX_FILE" "$ROUND_DIR/meta.json"
 
 CLAUDE_BALLOT_EXISTS=false
 CODEX_BALLOT_EXISTS=false
