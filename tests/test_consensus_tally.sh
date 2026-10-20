@@ -108,5 +108,27 @@ if [ "$STATUS" == "CONVERGED" ]; then
 fi
 echo "PASS: Per-peer YAGNI floor verified"
 
+echo "=== Test 10: Unregistered Option cannot produce CONVERGED ==="
+# Both prefer Option_X, but manifest only registers Option_0
+cp "$TEMP_DIR/claude.json" "$TEMP_DIR/claude_unreg.json"
+cp "$TEMP_DIR/codex.json" "$TEMP_DIR/codex_unreg.json"
+jq '.preferred_option = "Option_X" | .stance = "ACCEPT"' "$TEMP_DIR/claude_unreg.json" > "$TEMP_DIR/cu.json" && mv "$TEMP_DIR/cu.json" "$TEMP_DIR/claude_unreg.json"
+jq '.preferred_option = "Option_X" | .stance = "ACCEPT"' "$TEMP_DIR/codex_unreg.json" > "$TEMP_DIR/xu.json" && mv "$TEMP_DIR/xu.json" "$TEMP_DIR/codex_unreg.json"
+
+cat <<'EOF' > "$TEMP_DIR/manifest_only_opt0.json"
+{
+  "deliberation_id": "test-tally-10",
+  "options": [{"id": "Option_0", "description": "Option 0"}]
+}
+EOF
+
+bash "$TALLY_SH" "$TEMP_DIR/claude_unreg.json" "$TEMP_DIR/codex_unreg.json" "$TEMP_DIR/tally10.json" 1 3 "$TEMP_DIR/manifest_only_opt0.json"
+STATUS10=$(jq -r .status "$TEMP_DIR/tally10.json")
+if [ "$STATUS10" == "CONVERGED" ] || [ "$STATUS10" == "CONVERGED_WITH_DISSENT" ]; then
+  echo "FAIL: Expected non-convergence on unregistered option, got $STATUS10" >&2
+  exit 1
+fi
+echo "PASS: Unregistered option rejection verified"
+
 echo "All tally tests passed successfully!"
 

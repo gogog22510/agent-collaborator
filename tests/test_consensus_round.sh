@@ -45,6 +45,45 @@ elif [ "$MODE" = "LADDER_TEST" ]; then
     echo "Rate limit exceeded (429)" >&2
     exit 1
   fi
+elif [ "$MODE" = "COUNTER_PROPOSAL" ]; then
+  cat <<'INNER'
+```json
+{
+  "deliberation_id": "test-dlb-09",
+  "round": 1,
+  "agent": "claude",
+  "model": "sonnet",
+  "preferred_option": "Option_0",
+  "stance": "BLOCK",
+  "metrics": {
+    "technical_feasibility": {"score": 2, "confidence": 0.9, "rationale": "Option 0 POSIX primitives cannot integrate into Flutter."},
+    "architectural_simplicity": {"score": 4, "confidence": 0.8, "rationale": "Simple but incompatible."},
+    "yagni_and_parsimony": {"score": 5, "confidence": 0.9, "cognitive_overhead": "LOW", "indirection_layers": 0, "rationale": "Standard baseline."},
+    "robustness_failure_modes": {"score": 2, "confidence": 0.8, "rationale": "Discards existing consistency guarantees."},
+    "maintainability_testability": {"score": 3, "confidence": 0.8, "rationale": "Requires rewrite."}
+  },
+  "over_architecture_flags": [],
+  "blocking_objections": [
+    {
+      "id": "OBJ-1",
+      "type": "factual",
+      "metric_target": "technical_feasibility",
+      "claim": "Option 0 cannot preserve existing Flutter UI and state lifecycle.",
+      "resolution_condition": "Define an incremental repair option within Dart architecture."
+    }
+  ],
+  "counter_proposal": {
+    "title": "Targeted Consistency Repair",
+    "description": "Incremental reducer fixes for event idempotency, scene anchoring, and volume pruning without rewriting Riverpod/Hive.",
+    "resolves_objections": ["OBJ-1"]
+  },
+  "position_changes": []
+}
+```
+
+## Executive Summary & Rationale
+Option 0 breaks the Flutter app; proposing targeted consistency repair instead.
+INNER
 fi
 
 # Simulate concurrent work
@@ -508,5 +547,39 @@ if [ "$CODEX_MODEL_USED" != "gpt-4o" ] && [ "$CODEX_MODEL_USED" != "default" ]; 
 fi
 
 echo "PASS: Model fallback ladder verified."
+
+echo "=== Test 9: Counter-Proposal Synthesis into Manifest Options ==="
+DELIB_DIR9="$TEMP_DIR/delib_test9"
+MOCK_LOG_DIR9="$TEMP_DIR/logs9"
+mkdir -p "$DELIB_DIR9" "$MOCK_LOG_DIR9"
+
+cat <<'EOF' > "$DELIB_DIR9/manifest.json"
+{
+  "deliberation_id": "test-dlb-09",
+  "topic": "Synthesis Test",
+  "options": [{"id": "Option_0", "description": "Option 0"}]
+}
+EOF
+
+export MOCK_LOG_DIR="$MOCK_LOG_DIR9"
+export MOCK_CLAUDE_MODE="COUNTER_PROPOSAL"
+export MOCK_CODEX_MODE="BLOCK_OPTION_B"
+
+bash "$ROUND_SCRIPT" "$DELIB_DIR9" 1
+
+MANIFEST_OPTIONS=$(jq -c '.options' "$DELIB_DIR9/manifest.json")
+HAS_OPTION_A=$(echo "$MANIFEST_OPTIONS" | jq -e 'map(select(.id == "Option_A")) | length')
+
+if [ "$HAS_OPTION_A" -lt 1 ]; then
+  echo "FAIL: Expected Option_A to be synthesized into manifest.json, options: $MANIFEST_OPTIONS" >&2
+  exit 1
+fi
+
+DIGEST_FILE9="$DELIB_DIR9/round-1/digest.md"
+if ! grep -q "Synthesized Candidate Options" "$DIGEST_FILE9"; then
+  echo "FAIL: Expected digest to list synthesized candidate options" >&2
+  exit 1
+fi
+echo "PASS: Counter-proposal synthesis verified."
 
 echo "All consensus_round tests passed successfully!"

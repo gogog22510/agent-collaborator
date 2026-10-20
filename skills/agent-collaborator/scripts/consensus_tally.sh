@@ -17,6 +17,19 @@ CODEX_BALLOT="$2"
 OUTPUT_TALLY="$3"
 ROUND_NUM="${4:-1}"
 MAX_ROUNDS="${5:-3}"
+MANIFEST_ARG="${6:-}"
+
+# Parse registered options from manifest argument or default location
+REGISTERED_OPTIONS="[]"
+if [ -n "$MANIFEST_ARG" ]; then
+  if [ -f "$MANIFEST_ARG" ]; then
+    REGISTERED_OPTIONS=$(jq -c '[.options[]? | if type == "object" then (.id // .name) elif type == "string" then . else empty end]' "$MANIFEST_ARG" 2>/dev/null || echo "[]")
+  elif echo "$MANIFEST_ARG" | jq -e . >/dev/null 2>&1; then
+    REGISTERED_OPTIONS=$(echo "$MANIFEST_ARG" | jq -c 'if type == "array" then . elif type == "object" and .options then [.options[]? | if type == "object" then (.id // .name) else . end] else [] end')
+  fi
+elif [ -f "$(dirname "$OUTPUT_TALLY")/../manifest.json" ]; then
+  REGISTERED_OPTIONS=$(jq -c '[.options[]? | if type == "object" then (.id // .name) elif type == "string" then . else empty end]' "$(dirname "$OUTPUT_TALLY")/../manifest.json" 2>/dev/null || echo "[]")
+fi
 
 # Ensure numeric round values
 if ! [[ "$ROUND_NUM" =~ ^[0-9]+$ ]]; then
@@ -123,6 +136,7 @@ fi
 jq -s \
   --argjson round "$ROUND_NUM" \
   --argjson max_rounds "$MAX_ROUNDS" \
+  --argjson reg_opts "$REGISTERED_OPTIONS" \
   '
   def abs: if . < 0 then -. else . end;
 
@@ -149,11 +163,21 @@ jq -s \
 
   (($c_yp + $x_yp) / 2.0) as $yagni_avg |
 
-  (($c.blocking_objections // []) + ($x.blocking_objections // [])) as $blocking_objections |
+  (($c.blocking_objections // []) + ($x.blocking_objections // [])) as $raw_blocking_objections |
   (($c.over_architecture_flags // []) + ($x.over_architecture_flags // [])) as $over_architecture_flags |
 
   ($c.preferred_option != null and $c.preferred_option == $x.preferred_option) as $preferred_matches |
   $c.preferred_option as $candidate_option |
+
+  ($reg_opts | length == 0 or ($candidate_option != null and ($reg_opts | index($candidate_option) != null))) as $option_is_registered |
+
+  (if $option_is_registered then $raw_blocking_objections else $raw_blocking_objections + [{
+    "id": "UNREGISTERED_OPTION",
+    "type": "factual",
+    "metric_target": "technical_feasibility",
+    "claim": "The preferred option \($candidate_option) is not registered in manifest options.",
+    "resolution_condition": "Register the option in manifest.json before consensus can be certified."
+  }] end) as $blocking_objections |
 
   # Filter active flags and objections targeting the candidate option
   ($blocking_objections | map(select(
@@ -167,14 +191,14 @@ jq -s \
   # Per-peer YAGNI floor >= 3.0 and average >= 3.5
   ($c_yp >= 3.0 and $x_yp >= 3.0 and $yagni_avg >= 3.5) as $yagni_pass |
 
-  ($c.stance == "BLOCK" or $x.stance == "BLOCK" or ($active_objections | length > 0) or ($active_flags | length > 0)) as $has_block |
+  ($c.stance == "BLOCK" or $x.stance == "BLOCK" or ($active_objections | length > 0) or ($active_flags | length > 0) or ($option_is_registered | not)) as $has_block |
 
   ([$spreads[]] | all(. <= 1)) as $all_spreads_lte_1 |
 
   (
-    if $preferred_matches and ($has_block | not) and $yagni_pass and $all_spreads_lte_1 then
+    if $preferred_matches and $option_is_registered and ($has_block | not) and $yagni_pass and $all_spreads_lte_1 then
       "CONVERGED"
-    elif $preferred_matches and ($has_block | not) and $yagni_pass and ($all_spreads_lte_1 | not) then
+    elif $preferred_matches and $option_is_registered and ($has_block | not) and $yagni_pass and ($all_spreads_lte_1 | not) then
       "CONVERGED_WITH_DISSENT"
     elif $round >= $max_rounds then
       "DEADLOCK"

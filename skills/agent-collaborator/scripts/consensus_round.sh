@@ -646,7 +646,7 @@ if [ "$CLAUDE_BALLOT_EXISTS" = false ] && [ "$CODEX_BALLOT_EXISTS" = false ]; th
 fi
 
 # Execute consensus_tally.sh to produce tally.json
-bash "$TALLY_SH" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/tally.json" "$ROUND_NUM" "$MAX_ROUNDS"
+bash "$TALLY_SH" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/tally.json" "$ROUND_NUM" "$MAX_ROUNDS" "$MANIFEST"
 
 # Verify tally.json exists
 if [ ! -f "$ROUND_DIR/tally.json" ]; then
@@ -665,6 +665,7 @@ tally_file = sys.argv[1]
 claude_ballot_file = sys.argv[2]
 codex_ballot_file = sys.argv[3]
 digest_out = sys.argv[4]
+manifest_file = sys.argv[5] if len(sys.argv) > 5 else None
 
 with open(tally_file, "r", encoding="utf-8") as f:
     tally = json.load(f)
@@ -682,6 +683,61 @@ try:
         codex_ballot = json.load(f)
 except Exception:
     pass
+
+synthesized_options = []
+if manifest_file:
+    try:
+        with open(manifest_file, "r", encoding="utf-8") as mf:
+            manifest_data = json.load(mf)
+        options = manifest_data.get("options", [])
+        existing_ids = set()
+        existing_titles = set()
+        for o in options:
+            if isinstance(o, dict):
+                if "id" in o:
+                    existing_ids.add(o["id"])
+                if "title" in o and o["title"]:
+                    existing_titles.add(o["title"].strip().lower())
+            elif isinstance(o, str):
+                existing_ids.add(o)
+
+        letters = ["A", "B", "C", "D", "E", "F"]
+        peers = [("claude", claude_ballot), ("codex", codex_ballot)]
+        manifest_updated = False
+        for peer_name, ballot in peers:
+            cp = ballot.get("counter_proposal")
+            if isinstance(cp, dict):
+                title = cp.get("title", "").strip()
+                desc = cp.get("description", "").strip()
+                if (title or desc) and (not title or title.lower() not in existing_titles) and len(options) < 6:
+                    next_letter = None
+                    for l in letters:
+                        cand_id = f"Option_{l}"
+                        if cand_id not in existing_ids:
+                            next_letter = l
+                            break
+                    if next_letter:
+                        new_opt_id = f"Option_{next_letter}"
+                        new_opt = {
+                            "id": new_opt_id,
+                            "title": title or f"Option {next_letter}",
+                            "description": desc or title,
+                            "proposed_by": peer_name,
+                            "resolves_objections": cp.get("resolves_objections", [])
+                        }
+                        options.append(new_opt)
+                        existing_ids.add(new_opt_id)
+                        if title:
+                            existing_titles.add(title.lower())
+                        synthesized_options.append(new_opt)
+                        manifest_updated = True
+
+        if manifest_updated:
+            manifest_data["options"] = options
+            with open(manifest_file, "w", encoding="utf-8") as mf:
+                json.dump(manifest_data, mf, indent=2)
+    except Exception as e:
+        sys.stderr.write(f"Warning: Failed to synthesize options into manifest: {e}\n")
 
 round_num = tally.get("round", 1)
 max_rounds = tally.get("max_rounds", 3)
@@ -798,9 +854,25 @@ if agent_a_opt != agent_b_opt:
     lines.append("- If changing positions, agents must explicitly cite the objection ID that influenced their revision.")
     lines.append("")
 
+if synthesized_options:
+    lines.append("## 💡 Synthesized Candidate Options for Next Round")
+    lines.append("The following candidate options were synthesized from peer counter-proposals and registered in manifest.json:")
+    for opt in synthesized_options:
+        opt_id = opt.get("id")
+        opt_title = opt.get("title", "")
+        opt_by = opt.get("proposed_by", "agent")
+        opt_desc = opt.get("description", "")
+        res_objs = ", ".join(f"`{x}`" for x in opt.get("resolves_objections", [])) or "None specified"
+        lines.append(f"- **`{opt_id}`** — **Title**: {opt_title} (Proposed by `{opt_by}`)")
+        lines.append(f"  - **Description**: {opt_desc}")
+        lines.append(f"  - **Resolves Objections**: {res_objs}")
+    lines.append("")
+    lines.append("- In Round N+1, peers SHOULD evaluate these candidate options in addition to baseline Option 0.")
+    lines.append("")
+
 with open(digest_out, "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")
-' "$ROUND_DIR/tally.json" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/digest.md"
+' "$ROUND_DIR/tally.json" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/digest.md" "$MANIFEST"
 fi
 
 echo "Round $ROUND_NUM completed successfully. Tally status: $TALLY_STATUS."
