@@ -57,8 +57,8 @@ flowchart TD
 | **`claude-followup`** | 多輪會話接續，沿用當前目錄的 Claude 既有對話上下文 | `claude-followup [--model <model>] "<追問或生成指令>" [上下文檔案...]` |
 | **`codex-followup`** | 多輪會話接續，恢復當前目錄的最新 Codex 會話 (`resume --last`) | `codex-followup [--model <model>] "<追問或生成指令>" [上下文檔案...]` |
 | **`codex-optimize`** | 演算法複雜度/效能瓶頸分析、終端機與 CI 自動化 | `codex-optimize [--model <model>] [-c] "<任務或需求>" [上下文檔案...]` |
-| **`agent-deliberate`** | 多模型環狀共識研討，具備結構化指標表、Option 0 基線與 YAGNI 過度架構否決權 | `agent-deliberate [--rounds 3] "<議題或需求>" [上下文檔案...]` |
-| **`consensus-round`** | 單輪並行研討執行驅動腳本 | `consensus-round "<研討目錄>" <輪次>` |
+| **`agent-deliberate`** | 多模型環狀共識研討，具備結構化指標表、Option 0 基線、YAGNI 否決權與會話接續 | `agent-deliberate [OPTIONS] "<議題>" [檔案...]`<br/>`agent-deliberate -c [--dir <目錄>] [--guidance "<指引>"]` |
+| **`consensus-round`** | 單輪並行研討執行驅動腳本，具備模型階梯與引導注入 | `consensus-round [OPTIONS] "<研討目錄>" <輪次>` |
 
 ### 🎛️ 動態模型切換與任務分級
 所有腳本皆支援即時切換模型，具備三層優先級規則：
@@ -68,10 +68,61 @@ flowchart TD
 
 這讓 Antigravity 可以自主依任務複雜度分級調度：小型 Prompt 調整與簡易審查調用輕快省 Token 的模型（如 `haiku`、`o3-mini`），而關鍵系統架構與上線前安全審核則使用頂級旗艦模型（如 `sonnet`、`opus`、`o3`）。
 
+#### 🪜 自主模型階梯退避 (Autonomous Model Fallback Ladder)
+在共識研討或工具執行時，若指定模型遭遇 API 速率限制（HTTP 429）或帳號層級不支援（HTTP 400，如 ChatGPT 帳號在 Codex CLI 的模型限制），腳本將自動沿著備用階梯依序重試，確保研討不中斷：
+- **Claude CLI**：`sonnet` ➔ `haiku`
+- **Codex CLI**：`gpt-5.6-luna` ➔ `gpt-5.6-terra` ➔ `o3-mini` ➔ 原生預設
+*(可透過 `LADDER_CLAUDE` 與 `LADDER_CODEX` 環境變數自訂)*
+
 ### 🔄 多輪協作延續與記憶防幻覺規範 (Multi-Turn Collaboration Protocol)
 外部 Peer Agent CLI **預設為無狀態 (Stateless)**！總指揮嚴格禁止在沒有延續上下文的情況下，發起如 `claude -p "依據剛才的 Review 結論..."` 這類憑空預設模型記得前言的指令。
 - **同模型多輪延續 (In-Agent Continuity)**：需在當前目錄繼續討論或生成文件時，使用 `claude-followup` / `codex-followup`，或在既有工具附加 `-c` / `--continue`。
 - **跨模型成果匯整 (Cross-Agent Context Piping)**：Claude 與 Codex 的 Session 完全獨立不互通！跨模型協同（例如匯總 Codex 筆記與 Claude 審查以生成最終設計）時，**必須**使用顯式檔案注入，直接將參考成果傳入 `claude-refine <目標> "<目標描述>" [參考檔案...]` 或 `claude-design` 的上下文參數。
+
+### 🏛️ 多模型環狀共識研討 (`agent-deliberate` 與 `consensus-round`)
+
+當面臨重大架構取捨、分歧的實作提案或高風險技術決策時，透過環狀拓撲結構在 Claude（架構師與邊界獵人）與 Codex（務實紅隊與 YAGNI 看門狗）之間發起嚴謹辯論，由 Antigravity 擔任中立主持人，並由 Jetski 提供實證測試支援。
+
+#### 1. 環狀拓撲與角色分工
+- **Antigravity (Gemini - 研討主持人 / Neutral Host)**：定義討論主題、候選方案與強制性 **Option 0** 極簡基線；生成每輪匿名摘要 (`digest.md`)；以確定性 `jq` 計分規則客觀統計投票；在達成共識時生成最終架構藍圖 (`final_blueprint.md`)。不參與投票以避免主觀偏見。
+- **Claude CLI (架構師與邊界獵人 / Architect & Edge-Case Hunter)**：評估系統拓撲、模組邊界、正規狀態機、故障隔離與回歸預防。
+- **OpenAI Codex CLI (務實紅隊與 YAGNI 看門狗 / Pragmatic Red Team & YAGNI Watchdog)**：審查程式碼簡約度、標準庫替代方案、效能效率與過度架構風險，堅決剔除無效抽象。
+- **Jetski Native Subagent (實證測試探針 / Empirical Spike Probe)**：當模型雙方出現事實性爭議或 API / 效能假設分歧時，自動生成實證指引 (`jetski_evidence_prompt.md`) 執行即用即丟的測試或基準探針，以客觀事實終結爭辯。
+
+#### 2. 結構化指標評分表與防過度架構否決權 (Parsimony Veto)
+所有投票模型皆依據五大核心維度進行評分（1 至 5 分）：
+1. `technical_feasibility`（技術可行性）：方案能否在現有作業系統、CLI、執行階段與 API 約束下運作，無未證實的假設。
+2. `architectural_simplicity`（架構簡潔性）：組件是否解耦且能獨立理解，杜絕循環相依。
+3. `yagni_and_parsimony`（YAGNI 極簡主義 / 反過度設計）：嚴格的設計經濟性；每一行抽象皆須為具體需求服務。
+4. `robustness_failure_modes`（穩健性與故障模式）：逾時、部分故障、錯誤碼與狀態一致性是否處理得當。
+5. `maintainability_testability`（可維護性與可測試性）：能否以自動化測試驗證，無需繁複測試裝具。
+
+- **強制性 Option 0 MVA 極簡基線**：第 1 輪必須定義 `Option_0`（利用原生/OS 原語且無投機抽象的極簡可行架構）。任何替代方案皆承擔複雜度成本，必須證明 Option 0 之不足。
+- **極簡主義一票否決權 (Parsimony Veto)**：任何提案若平均 `yagni_and_parsimony` 得分低於 `3.5`，或存在未解決的 `over_architecture_flags`，立即喪失共識資格。提案方必須在下一輪簡化架構，或證明其嚴格必要性。
+- **動態反向提案合成 (Counter-Proposal Synthesis)**：當模型投下 `BLOCK` 阻擋票並提出替代架構時，系統會自動將其結構化並動態註冊至後續輪次的候選方案中。
+
+#### 3. CLI 指令與參數範例
+```bash
+# 全新發起共識研討（最多執行 N 輪）：
+agent-deliberate [--rounds 3] [--model-claude <model>] [--model-codex <model>] "<議題或需求>" [上下文檔案...]
+
+# 預先註冊候選方案：
+agent-deliberate --add-option "Option_A: SQLite 狀態帳本" --add-option "Option_B: 記憶體環狀緩衝" "<議題>" [上下文檔案...]
+
+# 在 DEADLOCK 或 IN_DEBATE 狀態下接續研討：
+agent-deliberate -c [--dir <目錄> | --id <ID>] [--guidance "<人類指引>"] [--add-option "<新方案>"]
+
+# 範例：注入人類操作員指引打破僵局：
+agent-deliberate -c --id dlb-20261025-abcd --guidance "採納 Option_A，但改用輕量 JSON Schema 驗證，不引入重型 ORM"
+
+# 單輪並行研討驅動腳本（底層指令）：
+consensus-round [OPTIONS] <研討目錄> <輪次>
+```
+
+#### 4. 僵局處理與共識收斂
+- **確定性共識門檻 (`CONVERGED`)**：所有投票模型一致選出相同偏好方案、無任何未解決的 `BLOCK` 阻擋票、五大指標評分極差 $\le 1.0$，且平均 YAGNI 分數 $\ge 3.5$。達成時生成 `final_blueprint.md`。
+- **有限輪次終止機制 (`DEADLOCK`)**：若在 `MAX_ROUNDS`（預設 3 輪）內未能達成共識，程序安全終止為 `DEADLOCK`，印出互動式僵局回報，並生成 `dissent_register.md` 完整記錄無法調和的權衡與事實異議。
+- **會話接續與人類介入 (`-c`)**：人類工程師或總指揮可檢視 `dissent_register.md`，使用 `--guidance "<指引>"` 注入決策傾向，並透過 `agent-deliberate -c` 接續研討，歷史選票與輪次摘要完全保留。
 
 ---
 

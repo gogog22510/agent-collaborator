@@ -61,8 +61,8 @@ Once installed, you can use these tools directly in any terminal or allow Antigr
 | **`claude-followup`** | Multi-turn session continuation, iterating on previous Claude discussion | `claude-followup [--model <model>] "<prompt>" [context_files...]` |
 | **`codex-followup`** | Multi-turn session continuation, resuming latest Codex session | `codex-followup [--model <model>] "<prompt>" [context_files...]` |
 | **`codex-optimize`** | Algorithmic complexity/performance analysis & terminal/CI automation | `codex-optimize [--model <model>] [-c] "<task_or_requirement>" [context_files...]` |
-| **`agent-deliberate`** | Multi-agent ring-structured consensus deliberation with Structured Metric Table & YAGNI veto | `agent-deliberate [--rounds 3] "<topic_or_requirement>" [context_files...]` |
-| **`consensus-round`** | Single-round concurrent driver for deliberation sessions | `consensus-round "<deliberation_dir>" <round_num>` |
+| **`agent-deliberate`** | Multi-agent ring-structured consensus deliberation with Metric Table, YAGNI veto & session continuation | `agent-deliberate [OPTIONS] "<topic>" [files...]`<br/>`agent-deliberate -c [--dir <DIR>] [--guidance "<text>"]` |
+| **`consensus-round`** | Single-round concurrent driver for deliberation sessions with model ladders & guidance injection | `consensus-round [OPTIONS] "<deliberation_dir>" <round_num>` |
 
 ### 🎛️ Dynamic Model Switching & Sizing
 All scripts support on-the-fly model switching with 3-tier precedence:
@@ -72,10 +72,61 @@ All scripts support on-the-fly model switching with 3-tier precedence:
 
 This allows Antigravity to autonomously size models to task difficulty — using fast, lightweight models (`haiku`, `o3-mini`) for prompt tuning and quick reviews, while reserving flagship models (`sonnet`, `opus`, `o3`) for complex system architecture and pre-flight audits.
 
+#### 🪜 Autonomous Model Fallback Ladder
+During consensus deliberation and tool execution, if a specified model hits API rate limits (HTTP 429) or is unsupported by the account tier (HTTP 400, e.g. ChatGPT account restrictions on Codex CLI), the scripts automatically cascade down a fallback ladder:
+- **Claude CLI**: `sonnet` ➔ `haiku`
+- **Codex CLI**: `gpt-5.6-luna` ➔ `gpt-5.6-terra` ➔ `o3-mini` ➔ CLI default
+*(Customizable via `LADDER_CLAUDE` and `LADDER_CODEX` environment variables)*
+
 ### 🔄 Multi-Turn Collaboration & Memory Anti-Hallucination Protocol
 External peer agent CLIs are **stateless by default**. Orchestrators must never run raw stateless commands referencing phantom context (e.g. `claude -p "Based on the earlier review findings..."`).
 - **In-Agent Continuity (Same Agent)**: When continuing an active discussion in the workspace, use `claude-followup` / `codex-followup` or add `-c` / `--continue` to continue the most recent session (avoid concurrent invocations in the same cwd).
 - **Cross-Agent Synthesis (Codex notes + Claude review -> Final Spec)**: Claude and Codex do not share session storage! For cross-agent workflows, always use **Explicit Context Piping**: pass reference files directly into `claude-refine <target> "<goal>" [ref_files...]` or context files to `claude-design`.
+
+### 🏛️ Multi-Agent Consensus Deliberation (`agent-deliberate` & `consensus-round`)
+
+When facing major architectural trade-offs, conflicting implementation designs, or contentious technical choices, run a structured, ring-topology debate between Claude (architect & edge-case hunter) and Codex (pragmatic red team & YAGNI watchdog), moderated by Antigravity with empirical spike support from Jetski.
+
+#### 1. Ring Topology & Role Division
+- **Antigravity (Gemini - Deliberation Moderator & Host)**: Frames the topic, candidate options, and mandatory **Option 0** baseline; generates anonymized round digests (`digest.md`); tallies ballots with deterministic `jq` scoring; and synthesizes the final blueprint (`final_blueprint.md`).
+- **Claude CLI (Architect & Edge-Case Hunter)**: Evaluates high-level system topology, module boundaries, formal state machines, failure modes, and regression prevention.
+- **OpenAI Codex CLI (Pragmatic Red Team & YAGNI Watchdog)**: Audits codebase simplicity, standard-library alternatives, performance efficiency, and over-architecture.
+- **Jetski Native Subagent (Empirical Spike Collector)**: When factual disputes or performance claims arise between Claude and Codex, instructions are generated (`jetski_evidence_prompt.md`) to run throwaway spikes, tests, or benchmarks to provide empirical ground truth rather than subjective argument.
+
+#### 2. Structured Metric Table & Parsimony Veto
+All voting peers score proposals against five core metrics (scale 1-5):
+1. `technical_feasibility`: Works within current OS, CLI, runtime, and API constraints without undocumented assumptions.
+2. `architectural_simplicity`: Decoupled, isolated components without circular dependencies.
+3. `yagni_and_parsimony` (The Anti-Overarchitecture Metric): Strict economy of design; every line must serve an active requirement.
+4. `robustness_failure_modes`: Graceful timeouts, error codes, and partial failure isolation.
+5. `maintainability_testability`: Verified with automated unit/integration tests without complex test harnesses.
+
+- **Mandatory Option 0 MVA Baseline**: Round 1 requires defining `Option_0` (Minimal Viable Architecture using native/OS primitives with zero speculative abstractions). Any alternative option must justify its complexity tax.
+- **Parsimony Veto**: Any proposal whose average `yagni_and_parsimony` score is below `3.5`, or has unaddressed `over_architecture_flags`, is disqualified from consensus. Proponents must either simplify the design in subsequent rounds or prove strict necessity.
+- **Dynamic Counter-Proposal Synthesis**: When a peer votes `BLOCK` with an alternative architecture, it is dynamically synthesized into the candidate options for subsequent rounds.
+
+#### 3. CLI Usage & Flags
+```bash
+# Fresh deliberation run (up to N rounds):
+agent-deliberate [--rounds 3] [--model-claude <model>] [--model-codex <model>] "<TOPIC_OR_REQUIREMENT>" [CONTEXT_FILES...]
+
+# Register custom candidate options upfront:
+agent-deliberate --add-option "Option_A: SQLite State Ledger" --add-option "Option_B: In-Memory Ring Buffer" "<TOPIC>" [CONTEXT_FILES...]
+
+# Resume an existing deliberation session after DEADLOCK or IN_DEBATE:
+agent-deliberate -c [--dir <DIR> | --id <ID>] [--guidance "<steering_guidance>"] [--add-option "<new_option>"]
+
+# Example: Unblock a deadlock with operator guidance:
+agent-deliberate -c --id dlb-20261025-abcd --guidance "Adopt Option_A with lightweight JSON schema validation instead of heavy ORM"
+
+# Single-round concurrent driver (executes Claude and Codex concurrently):
+consensus-round [OPTIONS] <DELIBERATION_DIR> <ROUND_NUM>
+```
+
+#### 4. Handling Deadlocks & Convergence
+- **Deterministic Convergence (`CONVERGED`)**: Unanimous preferred option, zero open `BLOCK` stances, metric score spread $\le 1.0$, and average YAGNI $\ge 3.5$. Produces `final_blueprint.md`.
+- **Bounded Termination (`DEADLOCK`)**: If consensus is not reached within `MAX_ROUNDS` (default: 3), execution terminates cleanly with status `DEADLOCK`, outputs an interactive Deadlock Escalation Report, and writes `dissent_register.md` capturing irreconcilable trade-offs and factual objections.
+- **Unblocking with Continuation (`-c`)**: The human operator or orchestrator can inspect `dissent_register.md`, provide steering guidance via `--guidance "<text>"`, and resume deliberation with `agent-deliberate -c` without losing prior ballots or digests.
 
 ---
 
