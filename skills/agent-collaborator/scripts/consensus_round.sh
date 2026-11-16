@@ -502,7 +502,11 @@ echo "Starting concurrent round $ROUND_NUM evaluations for deliberation $DELIBER
 
     if [ "$rc" -eq 126 ]; then
       echo "❌ [SANDBOX_BLOCKED: BypassSandbox=true REQUIRED]" >&2
-      cat "$err_file" >&2
+      if [ -s "$err_file" ] && [ -n "$(tr -d '[:space:]' < "$err_file" 2>/dev/null)" ]; then
+        head -c 2000 "$err_file" >&2 2>/dev/null || true
+      elif [ -s "$out_file" ]; then
+        head -c 2000 "$out_file" >&2 2>/dev/null || true
+      fi
       rm -f "$out_file" "$err_file"
       exit 126
     fi
@@ -531,7 +535,11 @@ with open(sys.argv[3], "w") as f:
       rm -f "$out_file" "$err_file"
       exit 0
     else
-      err_msg=$(head -n 5 "$err_file" | tr '\n' ' ' | head -c 200)
+      err_src="$err_file"
+      if [ ! -s "$err_src" ] || [ -z "$(tr -d '[:space:]' < "$err_src" 2>/dev/null)" ]; then
+        err_src="$out_file"
+      fi
+      err_msg=$(head -n 5 "$err_src" 2>/dev/null | tr '\n' ' ' | head -c 200)
       attempts=$(python3 -c '
 import sys, json
 att = json.loads(sys.argv[1])
@@ -571,7 +579,11 @@ PID_CLAUDE=$!
 
     if [ "$rc" -eq 126 ]; then
       echo "❌ [SANDBOX_BLOCKED: BypassSandbox=true REQUIRED]" >&2
-      cat "$err_file" >&2
+      if [ -s "$err_file" ] && [ -n "$(tr -d '[:space:]' < "$err_file" 2>/dev/null)" ]; then
+        head -c 2000 "$err_file" >&2 2>/dev/null || true
+      elif [ -s "$out_file" ]; then
+        head -c 2000 "$out_file" >&2 2>/dev/null || true
+      fi
       rm -f "$out_file" "$err_file"
       exit 126
     fi
@@ -600,7 +612,11 @@ with open(sys.argv[3], "w") as f:
       rm -f "$out_file" "$err_file"
       exit 0
     else
-      err_msg=$(head -n 5 "$err_file" | tr '\n' ' ' | head -c 200)
+      err_src="$err_file"
+      if [ ! -s "$err_src" ] || [ -z "$(tr -d '[:space:]' < "$err_src" 2>/dev/null)" ]; then
+        err_src="$out_file"
+      fi
+      err_msg=$(head -n 5 "$err_src" 2>/dev/null | tr '\n' ' ' | head -c 200)
       attempts=$(python3 -c '
 import sys, json
 att = json.loads(sys.argv[1])

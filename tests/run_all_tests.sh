@@ -17,6 +17,7 @@ TEST_SCRIPTS=(
   "test_consensus_tally.sh"
   "test_consensus_round.sh"
   "test_agent_deliberate.sh"
+  "test_wrapper_error_details.sh"
 )
 
 TOTAL_START=$(date +%s)

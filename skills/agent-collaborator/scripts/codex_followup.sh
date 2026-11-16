@@ -104,11 +104,16 @@ rm -f "$TEMP_OUTPUT" "$TEMP_ERR"
 
 # Check for failure exit codes
 if [ $EXIT_CODE -ne 0 ]; then
+  DETAIL_STR="$ERR_STR"
+  if [ -z "$(printf '%s' "$DETAIL_STR" | tr -d '[:space:]')" ] && [ -n "$OUTPUT_STR" ]; then
+    DETAIL_STR=$(printf '%s' "$OUTPUT_STR" | head -c 2000)
+  fi
+
   # Check for session resume failure
-  if echo "$ERR_STR" | grep -qiE "(no session|session not found|no recorded session|cannot resume)"; then
+  if printf '%s\n' "$DETAIL_STR" | grep -qiE "(no session|session not found|no recorded session|cannot resume)"; then
     echo "Error: No recorded session found to resume (Exit: $EXIT_CODE)." >&2
-    if [ -n "$ERR_STR" ]; then
-      echo "Detail: $ERR_STR" >&2
+    if [ -n "$DETAIL_STR" ]; then
+      printf 'Detail: %s\n' "$DETAIL_STR" >&2
     fi
     exit 1
   fi
@@ -117,32 +122,34 @@ if [ $EXIT_CODE -ne 0 ]; then
   if [ $EXIT_CODE -eq 126 ]; then
     echo "❌ [SANDBOX_BLOCKED: BypassSandbox=true REQUIRED]"
     echo "Reason: Sandbox execution blocked or permission denied (Exit: $EXIT_CODE)."
-    if [ -n "$ERR_STR" ]; then
-      echo "Detail: $ERR_STR"
+    if [ -n "$DETAIL_STR" ]; then
+      printf 'Detail: %s\n' "$DETAIL_STR"
     fi
     echo "ACTION FOR ORCHESTRATOR: Re-run this command immediately with \`BypassSandbox: true\` in run_command. DO NOT trigger fallback to internal reasoning."
     exit 126
   fi
 
   # Check for binary missing
-  if [ $EXIT_CODE -eq 127 ] || echo "$ERR_STR" | grep -qiE "(codex: command not found|codex: not found|^bash:.*codex:.*not found)"; then
+  if [ $EXIT_CODE -eq 127 ] || printf '%s\n' "$DETAIL_STR" | grep -qiE "(codex: command not found|codex: not found|^bash:.*codex:.*not found)"; then
     echo "❌ [COMMAND_NOT_FOUND]"
     echo "Reason: Codex CLI binary not found (Exit: $EXIT_CODE). Ensure codex is installed in ~/.local/bin or on PATH."
-    if [ -n "$ERR_STR" ]; then
-      echo "Detail: $ERR_STR"
+    if [ -n "$DETAIL_STR" ]; then
+      printf 'Detail: %s\n' "$DETAIL_STR"
     fi
     exit 127
   fi
 
   # Check for usage limits, rate limits, quota exhaustion, or connection failures
   echo "⚠️ [FALLBACK_TRIGGERED: CODEX_UNAVAILABLE]"
-  if echo "$ERR_STR" | grep -qiE "(rate limit|usage limit|quota|exceeded|credit balance|overloaded|429|529|authentication|sign in)"; then
+  if printf '%s\n' "$DETAIL_STR" | grep -qiE "(failed to authenticate|authentication (failed|error|required)|oauth.*expired|not logged in|please sign in|login required|unauthorized|(^|[^0-9])401([^0-9]|$))"; then
+    echo "Reason: Codex CLI authentication error (Exit: $EXIT_CODE)."
+  elif printf '%s\n' "$DETAIL_STR" | grep -qiE "(rate limit|usage limit|quota|exceeded|credit balance|overloaded|(^|[^0-9])(429|529)([^0-9]|$))"; then
     echo "Reason: Codex CLI rate limit, quota exhaustion, or connection error (Exit: $EXIT_CODE)."
   else
     echo "Reason: Codex CLI usage limit, connection, or execution error (Exit: $EXIT_CODE)."
   fi
-  if [ -n "$ERR_STR" ]; then
-    echo "Detail: $ERR_STR"
+  if [ -n "$DETAIL_STR" ]; then
+    printf 'Detail: %s\n' "$DETAIL_STR"
   fi
   exit 100
 fi
