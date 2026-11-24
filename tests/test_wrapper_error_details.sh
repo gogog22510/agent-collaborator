@@ -61,6 +61,11 @@ case "${MOCK_MODE:-AUTH_STDOUT}" in
     echo "Failed to authenticate: OAuth expired"
     exit 1
     ;;
+  SLOW_OK)
+    sleep "${MOCK_SLEEP_SEC:-1.5}"
+    echo "OK_RESPONSE ARGS:$*"
+    exit 0
+    ;;
   *)
     echo "Unknown MOCK_MODE in claude mock: ${MOCK_MODE:-}" >&2
     exit 2
@@ -298,5 +303,94 @@ for item in "codex_brainstorm|codex_brainstorm.sh|topic" "codex_optimize|codex_o
   fi
   echo "PASS: model_old_cli_$label"
 done
+
+echo "=== Test 6: Claude wrappers support --effort, stderr startup info, and heartbeat without polluting stdout ==="
+export MOCK_MODE="SLOW_OK"
+export MOCK_SLEEP_SEC="1.3"
+export CLAUDE_HEARTBEAT_SEC="1"
+for item in \
+  "claude_brainstorm|claude_brainstorm.sh|topic" \
+  "claude_design|claude_design.sh|topic" \
+  "claude_review|claude_review.sh|HEAD" \
+  "claude_refine|claude_refine.sh|dummy.md" \
+  "claude_followup|claude_followup.sh|followup"; do
+  IFS='|' read -r label script arg1 <<<"$item"
+  out_file="$TEMP_DIR/${label}.out"
+  err_file="$TEMP_DIR/${label}.err"
+  set +e
+  if [ "$label" = "claude_refine" ]; then
+    (cd "$WORK_DIR" && bash "$SCRIPTS_DIR/$script" --effort medium "$arg1" "goal") >"$out_file" 2>"$err_file"
+  else
+    (cd "$WORK_DIR" && bash "$SCRIPTS_DIR/$script" --effort medium "$arg1") >"$out_file" 2>"$err_file"
+  fi
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ]; then
+    echo "FAIL [claude_progress_$label]: expected exit 0, got $rc" >&2
+    cat "$err_file" >&2
+    exit 1
+  fi
+  if ! grep -q "OK_RESPONSE ARGS:.*--effort medium" "$out_file"; then
+    echo "FAIL [claude_progress_$label]: --effort medium not forwarded to claude:" >&2
+    cat "$out_file" >&2
+    exit 1
+  fi
+  if grep -q "still waiting for Claude CLI" "$out_file"; then
+    echo "FAIL [claude_progress_$label]: heartbeat leaked into stdout:" >&2
+    cat "$out_file" >&2
+    exit 1
+  fi
+  if ! grep -qE "^\[$label\] starting:.*effort=medium.*prompt_bytes=" "$err_file"; then
+    echo "FAIL [claude_progress_$label]: missing startup metadata on stderr:" >&2
+    cat "$err_file" >&2
+    exit 1
+  fi
+  if ! grep -qE "^\[$label\] still waiting for Claude CLI \(1s elapsed\)" "$err_file"; then
+    echo "FAIL [claude_progress_$label]: missing 1s heartbeat on stderr:" >&2
+    cat "$err_file" >&2
+    exit 1
+  fi
+  echo "PASS: claude_progress_$label"
+done
+
+# Env fallback CLAUDE_EFFORT + missing --effort argument check
+out_env=$(cd "$WORK_DIR" && MOCK_SLEEP_SEC=0 CLAUDE_HEARTBEAT_SEC=0 CLAUDE_EFFORT=low bash "$SCRIPTS_DIR/claude_design.sh" "topic" 2>/dev/null)
+if ! grep -q "OK_RESPONSE ARGS:.*--effort low" <<<"$out_env"; then
+  echo "FAIL [claude_effort_env]: CLAUDE_EFFORT=low was not forwarded:" >&2
+  printf '%s\n' "$out_env" >&2
+  exit 1
+fi
+echo "PASS: claude_effort_env"
+
+run_case "claude_effort_missing_arg" 1 bash "$SCRIPTS_DIR/claude_design.sh" --effort >/dev/null
+echo "PASS: claude_effort_missing_arg"
+
+# Verify --effort=<level> form
+out_eq=$(cd "$WORK_DIR" && MOCK_SLEEP_SEC=0 CLAUDE_HEARTBEAT_SEC=0 bash "$SCRIPTS_DIR/claude_design.sh" --effort=high "topic" 2>/dev/null)
+if ! grep -q "OK_RESPONSE ARGS:.*--effort high" <<<"$out_eq"; then
+  echo "FAIL [claude_effort_equals]: --effort=high was not forwarded:" >&2
+  printf '%s\n' "$out_eq" >&2
+  exit 1
+fi
+echo "PASS: claude_effort_equals"
+
+# Verify SIGTERM cleanly exits with 143 and stops heartbeat
+term_err="$TEMP_DIR/term.err"
+(cd "$WORK_DIR" && MOCK_SLEEP_SEC=10 CLAUDE_HEARTBEAT_SEC=1 bash "$SCRIPTS_DIR/claude_design.sh" "topic" >/dev/null 2>"$term_err") &
+term_pid=$!
+sleep 0.4
+kill -TERM "$term_pid" 2>/dev/null || true
+set +e
+wait "$term_pid"
+term_rc=$?
+set -e
+if [ "$term_rc" -ne 143 ]; then
+  echo "FAIL [claude_sigterm]: expected exit 143 on SIGTERM, got $term_rc" >&2
+  cat "$term_err" >&2
+  exit 1
+fi
+echo "PASS: claude_sigterm"
+
+unset MOCK_SLEEP_SEC CLAUDE_HEARTBEAT_SEC
 
 echo "All wrapper error detail tests passed!"

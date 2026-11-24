@@ -36,8 +36,8 @@
     - *Cross-Model Second Opinion*: Consult Codex when architecture or review trade-offs from Claude require a contrasting perspective.
     - *Computer Use (GUI verification)*: Codex's screen-driven mouse/keyboard control is only available via the **Codex desktop/ChatGPT app**, not this headless CLI script. If a task needs actual GUI interaction (verifying a UI in a browser/Figma/Xcode/Slack), say so explicitly and route it to a human or the Codex app — do not assume `codex-optimize` can do it.
   - **Model Selection & Sizing**:
-    - All peer agent commands support dynamic model specification via `--model <name>` / `-m <name>` or environment variables (`CLAUDE_MODEL`, `CODEX_MODEL`, `AGENT_MODEL`).
-    - The Orchestrator (Antigravity) can select faster/cost-effective models (e.g. `haiku`, `o3-mini`) for lightweight tasks or top-tier models (e.g. `opus`, `sonnet`, `o3`) for critical architectural design and security reviews.
+    - All peer agent commands support dynamic model specification via `--model <name>` / `-m <name>` or environment variables (`CLAUDE_MODEL`, `CODEX_MODEL`, `AGENT_MODEL`). Claude wrappers also support `--effort <low|medium|high>` (env fallback: `CLAUDE_EFFORT`) to tune reasoning depth vs. latency.
+    - The Orchestrator (Antigravity) can select faster/cost-effective models (e.g. `haiku`, `o3-mini`) for lightweight tasks or top-tier models (e.g. `opus`, `sonnet`, `o3`) for critical architectural design and security reviews. For large multi-file context (>30 KB) on Claude, consider passing `--effort medium` (or `--model sonnet`) to keep latency bounded within 1–3 minutes.
   - **Other Specialized Peer Agents (Extensible)**: see Section 5 below.
 
 > **Execution Notes by Driver Platform**:
@@ -81,6 +81,7 @@ Because external peer agent CLIs perform deep LLM reasoning, commands typically 
 2. **Turn Yielding & Reactive Wake-Up**:
    - When `run_command` moves to the background: output a brief status update (e.g., *"已啟動 `claude-brainstorm` 進行發散思維與方案評估，等待 Claude 分析完成以整合至計畫中..."*) and **STOP calling tools immediately** to end your turn.
    - Do NOT poll or busy-wait. The Antigravity reactive messaging system will automatically wake you up when the peer agent finishes.
+   - **Heartbeat & Long-Running Opus Calls**: Claude wrappers emit a startup metadata line (`model`, `effort`, `prompt_bytes`) and a 30s stderr heartbeat (`still waiting for Claude CLI (Xs elapsed)...`). If a notification fires while `claude-design` / `claude-brainstorm` is running on Opus with large multi-file context (which can legitimately take 3–8 minutes), check the task log: **active heartbeats mean the process is healthy and waiting on the API — do NOT prematurely kill it as hung**. If faster turnaround is needed, pass `--effort medium` or `--model sonnet` on invocation.
 3. **Mandatory Synthesis**:
    - Upon wake-up with peer output, thoroughly examine recommendations, incorporate identified edge cases and failure modes into `implementation_plan.md`, and only then present the synthesized plan to the user.
 

@@ -5,6 +5,7 @@
 set -uo pipefail
 
 MODEL=""
+EFFORT=""
 CONTINUE_SESSION=false
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -26,15 +27,34 @@ while [[ $# -gt 0 ]]; do
       fi
       shift
       ;;
+    --effort)
+      if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
+        EFFORT="$2"
+        shift 2
+      else
+        echo "Error: --effort requires an argument." >&2
+        exit 1
+      fi
+      ;;
+    --effort=*)
+      EFFORT="${1#*=}"
+      if [[ -z "$EFFORT" ]]; then
+        echo "Error: --effort requires an argument." >&2
+        exit 1
+      fi
+      shift
+      ;;
     -c|--continue)
       CONTINUE_SESSION=true
       shift
       ;;
     -h|--help)
-      echo "Usage: $0 [--model <model>] [-c|--continue] \"<TASK_OR_REQUIREMENT>\" [FILE_PATHS...]"
+      echo "Usage: $0 [--model <model>] [--effort <level>] [-c|--continue] \"<TASK_OR_REQUIREMENT>\" [FILE_PATHS...]"
       echo "Options:"
       echo "  -m, --model <model>  Model for Claude CLI (e.g. haiku, sonnet, opus)"
       echo "                       Env fallback: CLAUDE_MODEL, AGENT_MODEL"
+      echo "  --effort <level>     Effort level for Claude CLI (e.g. low, medium, high)"
+      echo "                       Env fallback: CLAUDE_EFFORT"
       echo "  -c, --continue       Continue previous conversation session (-c)"
       exit 0
       ;;
@@ -53,10 +73,16 @@ set -- "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
 if [ -z "$MODEL" ]; then
   MODEL="${CLAUDE_MODEL:-${AGENT_MODEL:-}}"
 fi
+if [ -z "$EFFORT" ]; then
+  EFFORT="${CLAUDE_EFFORT:-}"
+fi
 
 CLAUDE_ARGS=()
 if [ -n "$MODEL" ]; then
-  CLAUDE_ARGS=(--model "$MODEL")
+  CLAUDE_ARGS+=(--model "$MODEL")
+fi
+if [ -n "$EFFORT" ]; then
+  CLAUDE_ARGS+=(--effort "$EFFORT")
 fi
 
 if [ "$CONTINUE_SESSION" = true ]; then
@@ -118,9 +144,51 @@ Please output a structured, production-grade architectural design proposal cover
 # Execute Claude CLI and capture stdout / stderr
 TEMP_OUTPUT=$(mktemp)
 TEMP_ERR=$(mktemp)
+HEARTBEAT_PID=""
+cleanup_claude_run() {
+  if [ -n "$HEARTBEAT_PID" ]; then
+    kill "$HEARTBEAT_PID" 2>/dev/null || true
+    wait "$HEARTBEAT_PID" 2>/dev/null || true
+    HEARTBEAT_PID=""
+  fi
+  rm -f "$TEMP_OUTPUT" "$TEMP_ERR"
+}
+trap cleanup_claude_run EXIT
+trap 'cleanup_claude_run; exit 130' INT
+trap 'cleanup_claude_run; exit 143' TERM
+
+SCRIPT_TAG="$(basename "$0" .sh)"
+PROMPT_BYTES=$(printf '%s' "$PROMPT" | wc -c | tr -d ' ')
+HEARTBEAT_SEC="${CLAUDE_HEARTBEAT_SEC:-30}"
+PARENT_PID=$$
+echo "[$SCRIPT_TAG] starting: model=${MODEL:-default} effort=${EFFORT:-default} prompt_bytes=$PROMPT_BYTES" >&2
+
+if [[ "$HEARTBEAT_SEC" =~ ^[1-9][0-9]*$ ]]; then
+  (
+    trap - EXIT
+    SLEEP_PID=""
+    trap '[ -n "$SLEEP_PID" ] && kill "$SLEEP_PID" 2>/dev/null || true; exit 0' TERM INT
+    ELAPSED=0
+    while kill -0 "$PARENT_PID" 2>/dev/null; do
+      sleep "$HEARTBEAT_SEC" &
+      SLEEP_PID=$!
+      wait "$SLEEP_PID" || break
+      kill -0 "$PARENT_PID" 2>/dev/null || break
+      ELAPSED=$((ELAPSED + HEARTBEAT_SEC))
+      echo "[$SCRIPT_TAG] still waiting for Claude CLI (${ELAPSED}s elapsed)..." >&2
+    done
+  ) &
+  HEARTBEAT_PID=$!
+fi
 
 echo "$PROMPT" | claude ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"} -p --tools "" > "$TEMP_OUTPUT" 2> "$TEMP_ERR"
 EXIT_CODE=$?
+
+if [ -n "$HEARTBEAT_PID" ]; then
+  kill "$HEARTBEAT_PID" 2>/dev/null || true
+  wait "$HEARTBEAT_PID" 2>/dev/null || true
+  HEARTBEAT_PID=""
+fi
 
 OUTPUT_STR=$(cat "$TEMP_OUTPUT")
 ERR_STR=$(cat "$TEMP_ERR")

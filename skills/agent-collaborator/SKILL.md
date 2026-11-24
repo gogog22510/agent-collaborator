@@ -179,6 +179,7 @@ When a peer agent command (`claude-brainstorm`, `codex-brainstorm`, `claude-desi
    - Briefly notify the user (e.g. *"已啟動 `claude-design` 進行架構諮詢，正在等待 Claude 分析反饋以整合至設計計畫中..."*).
    - **STOP calling tools immediately** to end your turn.
    - The Antigravity messaging system will automatically wake you up with the full output as soon as the background task completes.
+   - **Heartbeat & Long-Running Opus Calls**: Claude wrappers print startup metadata (`model`, `effort`, `prompt_bytes`) and a 30s stderr heartbeat (`still waiting for Claude CLI (Xs elapsed)...`). Active heartbeats mean the call is healthy (Opus with large multi-file context can take 3–8 minutes) — **do NOT kill it prematurely as hung**. When passing large multi-file context (>30 KB) and faster turnaround is preferred, pass `--effort medium` or `--model sonnet`.
 3. **Synthesize Peer Feedback Upon Wake-Up**:
    - When the task completes and delivers peer recommendations, thoroughly review architecture boundaries, state machine edge cases, and failure modes.
    - Synthesize these insights directly into `implementation_plan.md` (under a dedicated section such as `### 🏛️ Peer Architecture Consultation`).
