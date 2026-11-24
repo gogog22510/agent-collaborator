@@ -107,6 +107,17 @@ if [ $EXIT_CODE -ne 0 ]; then
   DETAIL_STR="$ERR_STR"
   if [ -z "$(printf '%s' "$DETAIL_STR" | tr -d '[:space:]')" ] && [ -n "$OUTPUT_STR" ]; then
     DETAIL_STR=$(printf '%s' "$OUTPUT_STR" | head -c 2000)
+  elif [ "${#DETAIL_STR}" -gt 2000 ]; then
+    TRIMMED_ERR=$(printf '%s\n' "$DETAIL_STR" | tail -n 40 | grep -iE '^[[:space:]]*(warning|error):' || true)
+    if [ -n "$TRIMMED_ERR" ]; then
+      DETAIL_STR="$TRIMMED_ERR"
+    else
+      DETAIL_STR=$(printf '%s\n' "$DETAIL_STR" | tail -n 20)
+    fi
+  fi
+  DISPLAY_DETAIL="$DETAIL_STR"
+  if [ "${#DISPLAY_DETAIL}" -gt 2000 ]; then
+    DISPLAY_DETAIL=$(printf '%s' "$DISPLAY_DETAIL" | tail -c 2000)
   fi
 
   # Check for session resume failure
@@ -139,17 +150,33 @@ if [ $EXIT_CODE -ne 0 ]; then
     exit 127
   fi
 
-  # Check for usage limits, rate limits, quota exhaustion, or connection failures
+  # Check for usage limits, rate limits, quota exhaustion, unsupported model/outdated CLI, or connection failures
   echo "⚠️ [FALLBACK_TRIGGERED: CODEX_UNAVAILABLE]"
   if printf '%s\n' "$DETAIL_STR" | grep -qiE "(failed to authenticate|authentication (failed|error|required)|oauth.*expired|not logged in|please sign in|login required|unauthorized|(^|[^0-9])401([^0-9]|$))"; then
     echo "Reason: Codex CLI authentication error (Exit: $EXIT_CODE)."
+  elif printf '%s\n' "$DETAIL_STR" | grep -qiE "(model metadata for .* not found|model_not_found|not supported when using codex|the ['\"\`][^'\"\`]+['\"\`] model is not supported|unsupported model)"; then
+    echo "Reason: Codex CLI model unsupported or CLI version is too old (Exit: $EXIT_CODE)."
+    CODEX_BIN=$(command -v codex 2>/dev/null | tr -cd '[:print:]' || true)
+    CODEX_TARGET=""
+    if [ -n "$CODEX_BIN" ] && [ -L "$CODEX_BIN" ]; then
+      CODEX_TARGET=$(readlink "$CODEX_BIN" 2>/dev/null | tr -cd '[:print:]' || true)
+    fi
+    CODEX_VER=$(codex --version 2>/dev/null | head -n 1 | tr -cd '[:print:]' || true)
+    HINT_BIN="${CODEX_BIN:-codex}"
+    if [ -n "$CODEX_TARGET" ]; then
+      HINT_BIN="$HINT_BIN -> $CODEX_TARGET"
+    fi
+    if [ -n "$CODEX_VER" ]; then
+      HINT_BIN="$HINT_BIN ($CODEX_VER)"
+    fi
+    echo "Hint: Active binary: $HINT_BIN. Your ~/.codex/config.toml model may require a newer Codex CLI — upgrade codex or pass --model <model>."
   elif printf '%s\n' "$DETAIL_STR" | grep -qiE "(rate limit|usage limit|quota|exceeded|credit balance|overloaded|(^|[^0-9])(429|529)([^0-9]|$))"; then
     echo "Reason: Codex CLI rate limit, quota exhaustion, or connection error (Exit: $EXIT_CODE)."
   else
     echo "Reason: Codex CLI usage limit, connection, or execution error (Exit: $EXIT_CODE)."
   fi
-  if [ -n "$DETAIL_STR" ]; then
-    printf 'Detail: %s\n' "$DETAIL_STR"
+  if [ -n "$DISPLAY_DETAIL" ]; then
+    printf 'Detail: %s\n' "$DISPLAY_DETAIL"
   fi
   exit 100
 fi

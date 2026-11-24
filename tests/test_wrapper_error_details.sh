@@ -70,6 +70,10 @@ EOF
 
 cat <<'EOF' > "$MOCK_BIN/codex"
 #!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli ${MOCK_CODEX_VERSION:-0.153.4}"
+  exit 0
+fi
 case "${MOCK_MODE:-AUTH_STDOUT}" in
   AUTH_STDOUT)
     echo "Failed to authenticate: OAuth session expired and could not be refreshed"
@@ -90,6 +94,22 @@ case "${MOCK_MODE:-AUTH_STDOUT}" in
     ;;
   AUTH_ROUND)
     echo "Failed to authenticate: OAuth expired"
+    exit 1
+    ;;
+  MODEL_OLD_CLI)
+    {
+      echo "OpenAI Codex v0.153.4"
+      echo "--------"
+      echo "model: gpt-6-luna"
+      echo "--------"
+      echo "user"
+      # Simulate large echoed prompt (>3KB) that would otherwise drown out the error
+      for _ in $(seq 1 80); do
+        echo "PROMPT_PADDING_LINE_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      done
+      echo "warning: Model metadata for \`gpt-6-luna\` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."
+      echo 'ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The '\''gpt-6-luna'\'' model is not supported when using Codex with a ChatGPT account.","code":"model_not_found"}}'
+    } >&2
     exit 1
     ;;
   *)
@@ -244,4 +264,39 @@ for peer in claude codex; do
   fi
 done
 echo "PASS: consensus_round stdout error metadata verified."
+
+echo "=== Test 5: Codex wrappers diagnose unsupported model / outdated CLI and trim echoed prompt ==="
+export MOCK_MODE="MODEL_OLD_CLI"
+export MOCK_CODEX_VERSION="0.153.4"
+for item in "codex_brainstorm|codex_brainstorm.sh|topic" "codex_optimize|codex_optimize.sh|topic" "codex_followup|codex_followup.sh|followup"; do
+  IFS='|' read -r label script arg <<<"$item"
+  out=$(run_case "model_old_cli_$label" 100 bash "$SCRIPTS_DIR/$script" "$arg")
+  if ! grep -q "FALLBACK_TRIGGERED: CODEX_UNAVAILABLE" <<<"$out"; then
+    echo "FAIL [model_old_cli_$label]: missing FALLBACK_TRIGGERED" >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+  fi
+  if ! grep -qF "Reason: Codex CLI model unsupported or CLI version is too old (Exit: 1)." <<<"$out"; then
+    echo "FAIL [model_old_cli_$label]: Reason should match exact unsupported model / outdated CLI message:" >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+  fi
+  if ! grep -qE "^Hint:.*0\.153\.4" <<<"$out"; then
+    echo "FAIL [model_old_cli_$label]: Hint line should surface current codex CLI version (0.153.4):" >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+  fi
+  if ! grep -q "model_not_found" <<<"$out"; then
+    echo "FAIL [model_old_cli_$label]: Detail should preserve model_not_found error:" >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+  fi
+  if grep -q "PROMPT_PADDING_LINE" <<<"$out"; then
+    echo "FAIL [model_old_cli_$label]: Detail should trim echoed prompt padding instead of dumping it:" >&2
+    printf '%s\n' "$out" >&2
+    exit 1
+  fi
+  echo "PASS: model_old_cli_$label"
+done
+
 echo "All wrapper error detail tests passed!"
