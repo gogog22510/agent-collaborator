@@ -86,7 +86,7 @@ with open(template_path, "r", encoding="utf-8") as f:
     text = f.read()
 
 # Extract content between ````markdown ... ```` (or legacy ```markdown ... ```) code fences
-match = re.search(r"````markdown\n(.*?)\n````", text, re.DOTALL) or re.search(r"```markdown\n(.*?)\n```", text, re.DOTALL)
+match = re.search(r"^````markdown\n(.*?)\n````$", text, re.DOTALL | re.MULTILINE) or re.search(r"^```markdown\n(.*?)\n```$", text, re.DOTALL | re.MULTILINE)
 content = match.group(1).strip() + "\n" if match else text
 
 targets = [
@@ -95,8 +95,10 @@ targets = [
 ]
 for target in targets:
     os.makedirs(os.path.dirname(target), exist_ok=True)
-    with open(target, "w", encoding="utf-8") as out:
+    tmp_path = f"{target}.tmp.{os.getpid()}"
+    with open(tmp_path, "w", encoding="utf-8") as out:
         out.write(content)
+    os.replace(tmp_path, target)
 EOF
     then
       echo -e "${GREEN}✓ Updated global AGENTS.md in ~/.gemini/config and ~/.gemini${NC}"
@@ -200,16 +202,21 @@ marker_end = sys.argv[4]
 with open(template_file, "r", encoding="utf-8") as f:
     text = f.read()
 
-match = re.search(r"````markdown\n(.*?)\n````", text, re.DOTALL) or re.search(r"```markdown\n(.*?)\n```", text, re.DOTALL)
+match = re.search(r"^````markdown\n(.*?)\n````$", text, re.DOTALL | re.MULTILINE) or re.search(r"^```markdown\n(.*?)\n```$", text, re.DOTALL | re.MULTILINE)
 contract = match.group(1).strip() + "\n" if match else text
 block = f"{marker_start}\n{contract}{marker_end}\n"
+
+def atomic_write(path, data):
+    tmp_path = f"{path}.tmp.{os.getpid()}"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(data)
+    os.replace(tmp_path, path)
 
 if not os.path.exists(agents_file):
     parent_dir = os.path.dirname(os.path.abspath(agents_file))
     if parent_dir:
         os.makedirs(parent_dir, exist_ok=True)
-    with open(agents_file, "w", encoding="utf-8") as f:
-        f.write(block)
+    atomic_write(agents_file, block)
     print("INJECTED")
     sys.exit(0)
 
@@ -219,13 +226,11 @@ with open(agents_file, "r", encoding="utf-8") as f:
 pattern = re.escape(marker_start) + r".*?" + re.escape(marker_end) + r"\n?"
 if re.search(pattern, existing, re.DOTALL):
     updated = re.sub(pattern, lambda m: block, existing, flags=re.DOTALL)
-    with open(agents_file, "w", encoding="utf-8") as f:
-        f.write(updated)
+    atomic_write(agents_file, updated)
     print("UPDATED")
 else:
     prefix = "\n" if existing.strip() else ""
-    with open(agents_file, "w", encoding="utf-8") as f:
-        f.write(existing + prefix + block)
+    atomic_write(agents_file, existing + prefix + block)
     print("INJECTED")
 EOF
 ) || py_status=$?

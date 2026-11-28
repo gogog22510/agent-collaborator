@@ -776,6 +776,7 @@ if [ "$THREE_PEER_MODE" = true ] && [ "$MANIFEST_HAS_GEMINI" != "true" ]; then
     mv "$MANIFEST.tmp.$$" "$MANIFEST"
   else
     rm -f "$MANIFEST.tmp.$$"
+    echo "Warning: Failed to persist 3-peer voters list into $MANIFEST" >&2
   fi
 fi
 
@@ -946,7 +947,11 @@ if consensus_opt:
     lines.append(f"**Consensus Option**: `{consensus_opt}`")
 if reduced_quorum:
     lines.append("**Quorum**: Reduced quorum (2 of 3 peers participating)")
-lines.append(f"**Average YAGNI Score**: `{float(yagni_avg):.2f}` / 5.0 (Threshold: 3.5)")
+try:
+    yagni_avg_f = float(yagni_avg)
+except (TypeError, ValueError):
+    yagni_avg_f = 0.0
+lines.append(f"**Average YAGNI Score**: `{yagni_avg_f:.2f}` / 5.0 (Threshold: 3.5)")
 lines.append("")
 
 lines.append("## 1. Anonymized Agent Positions & Preferred Options")

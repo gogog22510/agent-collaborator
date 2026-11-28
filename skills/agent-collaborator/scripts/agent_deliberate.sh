@@ -385,8 +385,9 @@ if [ -n "$FINALIZE_ROUND" ]; then
   # Read-only finalize path: preserve manifest.json max_rounds and status until finalize_* runs
   if [ "$ROUNDS_EXPLICIT" = false ]; then
     MANIFEST_MAX=$(jq -r '.max_rounds // empty' "$MANIFEST_FILE" 2>/dev/null || true)
-    if [[ "$MANIFEST_MAX" =~ ^[0-9]+$ ]]; then
+    if [[ "$MANIFEST_MAX" =~ ^[0-9]{1,6}$ ]]; then
       MAX_ROUNDS="$((10#$MANIFEST_MAX))"
+      [ "$MAX_ROUNDS" -lt 1 ] && MAX_ROUNDS=3
     fi
   fi
 elif [ ! -f "$MANIFEST_FILE" ]; then
@@ -603,6 +604,7 @@ fi
 # Helper function to generate Final Blueprint Markdown
 generate_final_blueprint() {
   local target_round="$1"
+  local ts_override="${2:-}"
   local blueprint_path="$DELIBERATION_DIR/final_blueprint.md"
 
   python3 -c '
@@ -613,6 +615,7 @@ tally_file = sys.argv[2]
 round_dir = sys.argv[3]
 blueprint_out = sys.argv[4]
 round_num = sys.argv[5]
+ts_override = sys.argv[6] if len(sys.argv) > 6 else ""
 
 def escape_md(text):
     return str(text).replace("|", "\\|").replace("\n", " ").strip()
@@ -649,8 +652,8 @@ def load_ballot(path):
     except Exception:
         return {}
 
-invalid_peers = set(tally.get("invalid_peers", []))
-absent_peers = set(tally.get("absent_peers", []))
+invalid_peers = set(tally.get("invalid_peers") or [])
+absent_peers = set(tally.get("absent_peers") or [])
 excluded_peers = invalid_peers | absent_peers
 participating = tally.get("participating_peers")
 
@@ -676,7 +679,7 @@ topic = manifest.get("topic", "No topic specified")
 yagni_avg = tally.get("yagni_score_avg", 5.0)
 spreads = tally.get("score_spreads", {})
 max_rounds_val = manifest.get("max_rounds", 3)
-updated_at_val = manifest.get("updated_at", manifest.get("created_at", ""))
+updated_at_val = ts_override or manifest.get("updated_at") or manifest.get("created_at", "")
 reduced_quorum = tally.get("reduced_quorum", False)
 absent_peers = tally.get("absent_peers", [])
 invalid_peers = tally.get("invalid_peers", [])
@@ -762,12 +765,13 @@ tmp_bp = f"{blueprint_out}.tmp.{os.getpid()}"
 with open(tmp_bp, "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")
 os.replace(tmp_bp, blueprint_out)
-' "$MANIFEST_FILE" "$DELIBERATION_DIR/round-$target_round/tally.json" "$DELIBERATION_DIR/round-$target_round" "$blueprint_path" "$target_round"
+' "$MANIFEST_FILE" "$DELIBERATION_DIR/round-$target_round/tally.json" "$DELIBERATION_DIR/round-$target_round" "$blueprint_path" "$target_round" "$ts_override"
 }
 
 # Helper function to generate Dissent Register Markdown
 generate_dissent_register() {
   local target_round="$1"
+  local ts_override="${2:-}"
   local dissent_path="$DELIBERATION_DIR/dissent_register.md"
 
   python3 -c '
@@ -778,6 +782,7 @@ tally_file = sys.argv[2]
 round_dir = sys.argv[3]
 dissent_out = sys.argv[4]
 round_num = sys.argv[5]
+ts_override = sys.argv[6] if len(sys.argv) > 6 else ""
 
 manifest = {}
 if os.path.exists(manifest_file):
@@ -799,8 +804,8 @@ def load_ballot(path):
     except Exception:
         return {}
 
-invalid_peers = set(tally.get("invalid_peers", []))
-absent_peers = set(tally.get("absent_peers", []))
+invalid_peers = set(tally.get("invalid_peers") or [])
+absent_peers = set(tally.get("absent_peers") or [])
 excluded_peers = invalid_peers | absent_peers
 participating = tally.get("participating_peers")
 
@@ -819,7 +824,7 @@ blocking_objs = tally.get("blocking_objections", [])
 over_arch_flags = tally.get("over_architecture_flags", [])
 spreads = tally.get("score_spreads", {})
 max_rounds_val = manifest.get("max_rounds", 3)
-updated_at_val = manifest.get("updated_at", "")
+updated_at_val = ts_override or manifest.get("updated_at") or manifest.get("created_at", "")
 reduced_quorum = tally.get("reduced_quorum", False)
 
 lines = []
@@ -918,7 +923,7 @@ tmp_dis = f"{dissent_out}.tmp.{os.getpid()}"
 with open(tmp_dis, "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")
 os.replace(tmp_dis, dissent_out)
-' "$MANIFEST_FILE" "$DELIBERATION_DIR/round-$target_round/tally.json" "$DELIBERATION_DIR/round-$target_round" "$dissent_path" "$target_round"
+' "$MANIFEST_FILE" "$DELIBERATION_DIR/round-$target_round/tally.json" "$DELIBERATION_DIR/round-$target_round" "$dissent_path" "$target_round" "$ts_override"
 }
 
 # Helper function to generate Jetski evidence prompt
@@ -1011,7 +1016,7 @@ finalize_converged() {
   update_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
   # 1. Generate final_blueprint.md atomically FIRST; abort before touching manifest if it fails
-  if ! generate_final_blueprint "$target_round"; then
+  if ! generate_final_blueprint "$target_round" "$update_time"; then
     echo "Error: Blueprint generation failed for round $target_round; manifest.json left unchanged." >&2
     exit 1
   fi
@@ -1129,7 +1134,7 @@ finalize_deadlock() {
   fi
 
   # 1. Generate dissent_register.md atomically FIRST
-  if ! generate_dissent_register "$target_round"; then
+  if ! generate_dissent_register "$target_round" "$update_time"; then
     echo "Error: Dissent register generation failed for round $target_round; manifest.json left unchanged." >&2
     exit 1
   fi

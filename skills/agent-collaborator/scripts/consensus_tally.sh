@@ -311,14 +311,24 @@ jq -s \
     "resolution_condition": "Register the option in manifest.json before consensus can be certified."
   }] end) as $blocking_objections |
 
-  # Filter active flags and objections targeting the candidate option
-  ($blocking_objections | map(select(
-    (.target_option == null or .target_option == "" or .target_option == $candidate_option)
-  ))) as $active_objections |
+  # Filter active flags and objections: when peers converge on a candidate option,
+  # only objections/flags targeting that candidate (or untargeted) are active;
+  # when peers disagree ($preferred_matches == false), all objections remain active.
+  (if $preferred_matches then
+    ($blocking_objections | map(select(
+      (.target_option == null or .target_option == "" or .target_option == $candidate_option)
+    )))
+  else
+    $blocking_objections
+  end) as $active_objections |
 
-  ($over_architecture_flags | map(select(
-    (.target_option == null or .target_option == "" or .target_option == $candidate_option)
-  ))) as $active_flags |
+  (if $preferred_matches then
+    ($over_architecture_flags | map(select(
+      (.target_option == null or .target_option == "" or .target_option == $candidate_option)
+    )))
+  else
+    $over_architecture_flags
+  end) as $active_flags |
 
   # Per-peer YAGNI floor >= 3.0 and average >= 3.5
   (($yagni_scores | all(. >= 3.0)) and ($yagni_avg >= 3.5)) as $yagni_pass |
@@ -349,8 +359,10 @@ jq -s \
     "consensus_option": (if ($status == "CONVERGED" or $status == "CONVERGED_WITH_DISSENT") then $candidate_option else null end),
     "yagni_score_avg": $yagni_avg,
     "score_spreads": $spreads,
-    "blocking_objections": $blocking_objections,
-    "over_architecture_flags": $over_architecture_flags,
+    "blocking_objections": $active_objections,
+    "over_architecture_flags": $active_flags,
+    "reported_blocking_objections": $blocking_objections,
+    "reported_over_architecture_flags": $over_architecture_flags,
     "participating_peers": $participating,
     "absent_peers": $absent,
     "invalid_peers": $invalid,
