@@ -588,4 +588,137 @@ if ! grep -q "Synthesized Candidate Options" "$DIGEST_FILE9"; then
 fi
 echo "PASS: Counter-proposal synthesis verified."
 
+echo "=== Test 10: --no-tally + Gemini Ballot Drop + --tally-only (3-Peer Anonymized Digest & Counter-Proposal) ==="
+DELIB_DIR10="$TEMP_DIR/delib_test10"
+MOCK_LOG_DIR10="$TEMP_DIR/logs10"
+mkdir -p "$DELIB_DIR10" "$MOCK_LOG_DIR10"
+
+cat <<'EOF' > "$DELIB_DIR10/manifest.json"
+{
+  "deliberation_id": "test-dlb-10",
+  "topic": "3-Peer Parallel Handoff Test",
+  "options": [
+    {"id": "Option_0", "description": "Baseline Option 0"},
+    {"id": "Option_B", "description": "Heavy Queue Option B"}
+  ],
+  "max_rounds": 3
+}
+EOF
+
+export MOCK_LOG_DIR="$MOCK_LOG_DIR10"
+export MOCK_CLAUDE_MODE="ACCEPT_OPTION_0"
+export MOCK_CODEX_MODE="CONVERGE_OPTION_0"
+
+# Phase 1: --no-tally runs CLIs and renders gemini_prompt.md without creating tally.json
+bash "$ROUND_SCRIPT" --no-tally "$DELIB_DIR10" 1
+
+[ -s "$DELIB_DIR10/round-1/claude_ballot.json" ] || { echo "FAIL: claude_ballot.json missing after --no-tally" >&2; exit 1; }
+[ -s "$DELIB_DIR10/round-1/codex_ballot.json" ] || { echo "FAIL: codex_ballot.json missing after --no-tally" >&2; exit 1; }
+[ -s "$DELIB_DIR10/round-1/gemini_prompt.md" ] || { echo "FAIL: gemini_prompt.md missing after --no-tally" >&2; exit 1; }
+[ ! -f "$DELIB_DIR10/round-1/tally.json" ] || { echo "FAIL: tally.json should NOT exist after --no-tally" >&2; exit 1; }
+
+# Phase 2: Antigravity drops Gemini native subagent ballot with counter-proposal
+cat <<'EOF' > "$DELIB_DIR10/round-1/gemini_ballot.json"
+{
+  "deliberation_id": "test-dlb-10",
+  "round": 1,
+  "agent": "gemini",
+  "model": "gemini-pro",
+  "preferred_option": "Option_B",
+  "stance": "BLOCK",
+  "metrics": {
+    "technical_feasibility": {"score": 4, "confidence": 0.9, "rationale": "Needs hybrid buffering."},
+    "architectural_simplicity": {"score": 4, "confidence": 0.85, "rationale": "Simple in-memory ring."},
+    "yagni_and_parsimony": {"score": 4, "confidence": 0.9, "cognitive_overhead": "LOW", "indirection_layers": 1, "rationale": "Minimal ring buffer."},
+    "robustness_failure_modes": {"score": 4, "confidence": 0.85, "rationale": "Bounded memory."},
+    "maintainability_testability": {"score": 4, "confidence": 0.85, "rationale": "Pure unit tests."}
+  },
+  "over_architecture_flags": [],
+  "blocking_objections": [
+    {
+      "id": "OBJ-GEM-1",
+      "type": "tradeoff",
+      "metric_target": "robustness_failure_modes",
+      "claim": "Unbuffered writes drop bursts.",
+      "resolution_condition": "Add bounded in-memory ring buffer."
+    }
+  ],
+  "counter_proposal": {
+    "title": "Bounded In-Memory Ring Buffer",
+    "description": "Use a fixed-size in-memory ring buffer flushing directly to disk.",
+    "resolves_objections": ["OBJ-GEM-1"]
+  },
+  "position_changes": []
+}
+EOF
+
+# Phase 3: --tally-only tallies all 3 peers and emits anonymized digest
+bash "$ROUND_SCRIPT" --tally-only --gemini-ballot "$DELIB_DIR10/round-1/gemini_ballot.json" "$DELIB_DIR10" 1
+
+TALLY10_STATUS=$(jq -r .status "$DELIB_DIR10/round-1/tally.json")
+TALLY10_PEERS=$(jq '.participating_peers | length' "$DELIB_DIR10/round-1/tally.json")
+[ "$TALLY10_STATUS" = "IN_DEBATE" ] || { echo "FAIL: Expected IN_DEBATE, got $TALLY10_STATUS" >&2; exit 1; }
+[ "$TALLY10_PEERS" -eq 3 ] || { echo "FAIL: Expected 3 participating peers, got $TALLY10_PEERS" >&2; exit 1; }
+
+DIGEST10=$(cat "$DELIB_DIR10/round-1/digest.md")
+echo "$DIGEST10" | grep -q "Agent A" || { echo "FAIL: digest10 missing Agent A" >&2; exit 1; }
+echo "$DIGEST10" | grep -q "Agent B" || { echo "FAIL: digest10 missing Agent B" >&2; exit 1; }
+echo "$DIGEST10" | grep -q "Agent C" || { echo "FAIL: digest10 missing Agent C" >&2; exit 1; }
+if echo "$DIGEST10" | grep -iE "(claude|codex|gemini)"; then
+  echo "FAIL: digest10 leaked peer identity (claude/codex/gemini)" >&2
+  exit 1
+fi
+HAS_GEM_OPT=$(jq -e '.options | map(select(.title == "Bounded In-Memory Ring Buffer")) | length' "$DELIB_DIR10/manifest.json")
+[ "$HAS_GEM_OPT" -ge 1 ] || { echo "FAIL: Gemini counter-proposal not synthesized into manifest.json" >&2; exit 1; }
+echo "PASS: Test 10 (--no-tally + gemini ballot + --tally-only + anonymized 3-peer digest) verified."
+
+echo "=== Test 11: 2-of-3 Survival Quorum when Codex CLI fails during --no-tally ==="
+DELIB_DIR11="$TEMP_DIR/delib_test11"
+MOCK_LOG_DIR11="$TEMP_DIR/logs11"
+mkdir -p "$DELIB_DIR11" "$MOCK_LOG_DIR11"
+
+cat <<'EOF' > "$DELIB_DIR11/manifest.json"
+{
+  "deliberation_id": "test-dlb-11",
+  "topic": "Survival Quorum Test",
+  "options": [{"id": "Option_0", "description": "Baseline Option 0"}],
+  "max_rounds": 3
+}
+EOF
+
+export MOCK_LOG_DIR="$MOCK_LOG_DIR11"
+export MOCK_CLAUDE_MODE="ACCEPT_OPTION_0"
+export MOCK_CODEX_MODE="FAIL_100"
+
+bash "$ROUND_SCRIPT" --no-tally "$DELIB_DIR11" 1
+
+cat <<'EOF' > "$DELIB_DIR11/round-1/gemini_ballot.json"
+{
+  "deliberation_id": "test-dlb-11",
+  "round": 1,
+  "agent": "gemini",
+  "model": "gemini-pro",
+  "preferred_option": "Option_0",
+  "stance": "ACCEPT",
+  "metrics": {
+    "technical_feasibility": {"score": 5, "confidence": 0.9, "rationale": "Standard POSIX."},
+    "architectural_simplicity": {"score": 5, "confidence": 0.9, "rationale": "Single layer."},
+    "yagni_and_parsimony": {"score": 5, "confidence": 0.95, "cognitive_overhead": "LOW", "indirection_layers": 0, "rationale": "Minimal."},
+    "robustness_failure_modes": {"score": 4, "confidence": 0.85, "rationale": "Clean."},
+    "maintainability_testability": {"score": 5, "confidence": 0.9, "rationale": "Easy."}
+  },
+  "over_architecture_flags": [],
+  "blocking_objections": [],
+  "position_changes": []
+}
+EOF
+
+# Auto-detects round-1/gemini_ballot.json without explicit --gemini-ballot flag
+bash "$ROUND_SCRIPT" --tally-only "$DELIB_DIR11" 1
+
+[ "$(jq -r .status "$DELIB_DIR11/round-1/tally.json")" = "CONVERGED" ] || { echo "FAIL: Expected CONVERGED on Claude+Gemini survival quorum" >&2; exit 1; }
+[ "$(jq -r .reduced_quorum "$DELIB_DIR11/round-1/tally.json")" = "true" ] || { echo "FAIL: Expected reduced_quorum=true" >&2; exit 1; }
+[ "$(jq -r '.absent_peers | join(",")' "$DELIB_DIR11/round-1/tally.json")" = "codex" ] || { echo "FAIL: Expected absent_peers=[codex]" >&2; exit 1; }
+echo "PASS: Test 11 (2-of-3 survival quorum + auto-detect gemini_ballot.json) verified."
+
 echo "All consensus_round tests passed successfully!"

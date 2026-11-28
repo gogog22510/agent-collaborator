@@ -26,10 +26,36 @@ MAX_ROUNDS_OPT=""
 MODEL_CLAUDE_OPT=""
 MODEL_CODEX_OPT=""
 CLI_GUIDANCE=""
+NO_TALLY=false
+TALLY_ONLY=false
+GEMINI_BALLOT_OPT=""
+GEMINI_BALLOT_EXPLICIT=false
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --no-tally)
+      NO_TALLY=true
+      shift
+      ;;
+    --tally-only)
+      TALLY_ONLY=true
+      shift
+      ;;
+    --gemini-ballot)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --gemini-ballot requires a file path argument." >&2
+        exit 1
+      fi
+      GEMINI_BALLOT_OPT="$2"
+      GEMINI_BALLOT_EXPLICIT=true
+      shift 2
+      ;;
+    --gemini-ballot=*)
+      GEMINI_BALLOT_OPT="${1#*=}"
+      GEMINI_BALLOT_EXPLICIT=true
+      shift
+      ;;
     --max-rounds|-r)
       if [[ -n "${2:-}" && "${2:-}" != -* ]]; then
         MAX_ROUNDS_OPT="$2"
@@ -104,9 +130,14 @@ while [[ $# -gt 0 ]]; do
     -h|--help)
       echo "Usage: $0 [OPTIONS] <DELIBERATION_DIR> <ROUND_NUM>"
       echo "Options:"
-      echo "  -r, --max-rounds <N>    Maximum rounds allowed (default: 3)"
-      echo "  --model-claude <M>      Model name for Claude CLI"
-      echo "  --model-codex <M>       Model name for Codex CLI"
+      echo "  -r, --max-rounds <N>        Maximum rounds allowed (default: 3)"
+      echo "  --model-claude <M>          Model name for Claude CLI"
+      echo "  --model-codex <M>           Model name for Codex CLI"
+      echo "  --guidance <TEXT>           Human guidance override for this round"
+      echo "  --guidance-file <FILE>      Human guidance file override"
+      echo "  --gemini-ballot <FILE>      Path to Gemini native subagent ballot JSON"
+      echo "  --no-tally                  Run external CLIs and render gemini_prompt.md, skip tally"
+      echo "  --tally-only                Skip external CLIs, tally existing ballots and emit digest"
       exit 0
       ;;
     -*)
@@ -121,6 +152,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 set -- "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
+
+if [ "$NO_TALLY" = true ] && [ "$TALLY_ONLY" = true ]; then
+  echo "Error: --no-tally and --tally-only cannot be used together." >&2
+  exit 1
+fi
 
 if [ "$#" -lt 2 ]; then
   echo "Usage: $0 [OPTIONS] <DELIBERATION_DIR> <ROUND_NUM>" >&2
@@ -281,6 +317,7 @@ LADDER_CODEX=$(build_model_ladder "${MODEL_CODEX_OPT:-${CODEX_MODEL:-}}" "${CODE
 ROUND_DIGEST_CONTENT=""
 PRIOR_CLAUDE_BALLOT_CONTENT="{}"
 PRIOR_CODEX_BALLOT_CONTENT="{}"
+PRIOR_GEMINI_BALLOT_CONTENT="{}"
 
 if [ "$ROUND_NUM" -gt 1 ]; then
   PREV_ROUND=$((ROUND_NUM - 1))
@@ -293,6 +330,9 @@ if [ "$ROUND_NUM" -gt 1 ]; then
   fi
   if [ -f "$PREV_DIR/codex_ballot.json" ]; then
     PRIOR_CODEX_BALLOT_CONTENT="$(cat "$PREV_DIR/codex_ballot.json")"
+  fi
+  if [ -f "$PREV_DIR/gemini_ballot.json" ]; then
+    PRIOR_GEMINI_BALLOT_CONTENT="$(cat "$PREV_DIR/gemini_ballot.json")"
   fi
 fi
 
@@ -480,8 +520,15 @@ cleanup_temps() {
 }
 trap cleanup_temps EXIT
 
-# Concurrently dispatch Claude and Codex with fallback ladder in isolated session directories
-echo "Starting concurrent round $ROUND_NUM evaluations for deliberation $DELIBERATION_ID..."
+EXIT_CLAUDE=0
+EXIT_CODEX=0
+
+if [ "$TALLY_ONLY" = false ]; then
+  # Render Gemini native subagent prompt for auditability and replay
+  render_prompt "gemini" "native-subagent" "$PRIOR_GEMINI_BALLOT_CONTENT" "$HUMAN_GUIDANCE_CONTENT" "$ROUND_DIR/gemini_prompt.md"
+
+  # Concurrently dispatch Claude and Codex with fallback ladder in isolated session directories
+  echo "Starting concurrent round $ROUND_NUM evaluations for deliberation $DELIBERATION_ID..."
 
 (
   cd "$SESSION_CLAUDE"
@@ -684,8 +731,26 @@ with open(out_file, "w") as f:
     json.dump(meta, f, indent=2)
 ' "$DELIBERATION_ID" "$ROUND_NUM" "$META_CLAUDE_FILE" "$META_CODEX_FILE" "$ROUND_DIR/meta.json"
 
+  if [ "$NO_TALLY" = true ]; then
+    echo "Round $ROUND_NUM external CLI evaluations completed (--no-tally). Ready for Gemini ballot handoff and --tally-only."
+    exit 0
+  fi
+fi
+
+# Resolve optional Gemini ballot path (explicit --gemini-ballot or auto-detected in round dir)
+GEMINI_BALLOT_PATH=""
+THREE_PEER_MODE=false
+if [ "$GEMINI_BALLOT_EXPLICIT" = true ]; then
+  GEMINI_BALLOT_PATH="$GEMINI_BALLOT_OPT"
+  THREE_PEER_MODE=true
+elif [ -f "$ROUND_DIR/gemini_ballot.json" ]; then
+  GEMINI_BALLOT_PATH="$ROUND_DIR/gemini_ballot.json"
+  THREE_PEER_MODE=true
+fi
+
 CLAUDE_BALLOT_EXISTS=false
 CODEX_BALLOT_EXISTS=false
+GEMINI_BALLOT_EXISTS=false
 
 if [ -s "$ROUND_DIR/claude_ballot.json" ] && jq -e . "$ROUND_DIR/claude_ballot.json" >/dev/null 2>&1; then
   CLAUDE_BALLOT_EXISTS=true
@@ -693,16 +758,23 @@ fi
 if [ -s "$ROUND_DIR/codex_ballot.json" ] && jq -e . "$ROUND_DIR/codex_ballot.json" >/dev/null 2>&1; then
   CODEX_BALLOT_EXISTS=true
 fi
+if [ -n "$GEMINI_BALLOT_PATH" ] && [ -s "$GEMINI_BALLOT_PATH" ] && jq -e . "$GEMINI_BALLOT_PATH" >/dev/null 2>&1; then
+  GEMINI_BALLOT_EXISTS=true
+fi
 
 # Check for total peer outage
-if [ "$CLAUDE_BALLOT_EXISTS" = false ] && [ "$CODEX_BALLOT_EXISTS" = false ]; then
+if [ "$CLAUDE_BALLOT_EXISTS" = false ] && [ "$CODEX_BALLOT_EXISTS" = false ] && [ "$GEMINI_BALLOT_EXISTS" = false ]; then
   echo "⚠️ [FALLBACK_TRIGGERED: PEERS_UNAVAILABLE]" >&2
-  echo "Reason: Both Claude and Codex peer agents failed or were unavailable (Exit Claude: $EXIT_CLAUDE, Exit Codex: $EXIT_CODEX)." >&2
+  echo "Reason: All peer agents failed or were unavailable (Exit Claude: $EXIT_CLAUDE, Exit Codex: $EXIT_CODEX)." >&2
   exit 100
 fi
 
 # Execute consensus_tally.sh to produce tally.json
-bash "$TALLY_SH" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/tally.json" "$ROUND_NUM" "$MAX_ROUNDS" "$MANIFEST"
+if [ "$THREE_PEER_MODE" = true ]; then
+  bash "$TALLY_SH" --gemini "$GEMINI_BALLOT_PATH" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/tally.json" "$ROUND_NUM" "$MAX_ROUNDS" "$MANIFEST"
+else
+  bash "$TALLY_SH" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/tally.json" "$ROUND_NUM" "$MAX_ROUNDS" "$MANIFEST"
+fi
 
 # Verify tally.json exists
 if [ ! -f "$ROUND_DIR/tally.json" ]; then
@@ -722,23 +794,34 @@ claude_ballot_file = sys.argv[2]
 codex_ballot_file = sys.argv[3]
 digest_out = sys.argv[4]
 manifest_file = sys.argv[5] if len(sys.argv) > 5 else None
+gemini_ballot_file = sys.argv[6] if len(sys.argv) > 6 else ""
 
 with open(tally_file, "r", encoding="utf-8") as f:
     tally = json.load(f)
 
-claude_ballot = {}
-try:
-    with open(claude_ballot_file, "r", encoding="utf-8") as f:
-        claude_ballot = json.load(f)
-except Exception:
-    pass
+def load_ballot(path):
+    if not path:
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
-codex_ballot = {}
-try:
-    with open(codex_ballot_file, "r", encoding="utf-8") as f:
-        codex_ballot = json.load(f)
-except Exception:
-    pass
+claude_ballot = load_ballot(claude_ballot_file)
+codex_ballot = load_ballot(codex_ballot_file)
+gemini_ballot = load_ballot(gemini_ballot_file)
+
+# Ordered list of (anon_label, internal_peer_name, ballot)
+anon_peers = [
+    ("Agent A", "claude", claude_ballot),
+    ("Agent B", "codex", codex_ballot),
+]
+if gemini_ballot_file:
+    anon_peers.append(("Agent C", "gemini", gemini_ballot))
+
+peer_to_anon = {pname: alabel for alabel, pname, _ in anon_peers}
 
 synthesized_options = []
 if manifest_file:
@@ -758,9 +841,8 @@ if manifest_file:
                 existing_ids.add(o)
 
         letters = ["A", "B", "C", "D", "E", "F"]
-        peers = [("claude", claude_ballot), ("codex", codex_ballot)]
         manifest_updated = False
-        for peer_name, ballot in peers:
+        for alabel, peer_name, ballot in anon_peers:
             cp = ballot.get("counter_proposal")
             if isinstance(cp, dict):
                 title = cp.get("title", "").strip()
@@ -800,11 +882,7 @@ max_rounds = tally.get("max_rounds", 3)
 status = tally.get("status", "IN_DEBATE")
 consensus_opt = tally.get("consensus_option")
 yagni_avg = tally.get("yagni_score_avg", 0)
-
-agent_a_opt = claude_ballot.get("preferred_option", "Unknown / Degraded")
-agent_a_stance = claude_ballot.get("stance", "UNKNOWN")
-agent_b_opt = codex_ballot.get("preferred_option", "Unknown / Degraded")
-agent_b_stance = codex_ballot.get("stance", "UNKNOWN")
+reduced_quorum = tally.get("reduced_quorum", False)
 
 spreads = tally.get("score_spreads", {})
 blocking_objs = tally.get("blocking_objections", [])
@@ -816,17 +894,25 @@ lines.append("")
 lines.append(f"**Deliberation Status**: `{status}` (Round {round_num} of {max_rounds})")
 if consensus_opt:
     lines.append(f"**Consensus Option**: `{consensus_opt}`")
+if reduced_quorum:
+    lines.append("**Quorum**: Reduced quorum (2 of 3 peers participating)")
 lines.append(f"**Average YAGNI Score**: `{yagni_avg:.2f}` / 5.0 (Threshold: 3.5)")
 lines.append("")
 
 lines.append("## 1. Anonymized Agent Positions & Preferred Options")
-lines.append(f"- **Agent A**: Preferred Option `{agent_a_opt}` | Stance: `{agent_a_stance}`")
-lines.append(f"- **Agent B**: Preferred Option `{agent_b_opt}` | Stance: `{agent_b_stance}`")
+agent_opts = []
+for alabel, _, ballot in anon_peers:
+    opt = ballot.get("preferred_option", "Unknown / Degraded")
+    stance = ballot.get("stance", "UNKNOWN")
+    agent_opts.append((alabel, opt))
+    lines.append(f"- **{alabel}**: Preferred Option `{opt}` | Stance: `{stance}`")
 lines.append("")
 
 lines.append("## 2. Metric Score Comparison & Spreads")
-lines.append("| Metric | Agent A Score | Agent B Score | Spread (|A - B|) | Status |")
-lines.append("| :--- | :---: | :---: | :---: | :---: |")
+header_cols = ["Metric"] + [f"{alabel} Score" for alabel, _, _ in anon_peers] + ["Spread (max - min)", "Status"]
+align_cols = [":---"] + [":---:" for _ in anon_peers] + [":---:", ":---:"]
+lines.append("| " + " | ".join(header_cols) + " |")
+lines.append("| " + " | ".join(align_cols) + " |")
 
 metrics = [
     ("technical_feasibility", "Technical Feasibility"),
@@ -837,11 +923,10 @@ metrics = [
 ]
 
 for key, label in metrics:
-    score_a = claude_ballot.get("metrics", {}).get(key, {}).get("score", "-")
-    score_b = codex_ballot.get("metrics", {}).get(key, {}).get("score", "-")
+    row_scores = [str(b.get("metrics", {}).get(key, {}).get("score", "-")) for _, _, b in anon_peers]
     spread = spreads.get(key, "-")
     spread_status = "OK (<=1)" if isinstance(spread, (int, float)) and spread <= 1 else "**DISPUTE (>1)**"
-    lines.append(f"| {label} | {score_a} | {score_b} | {spread} | {spread_status} |")
+    lines.append("| " + " | ".join([label] + row_scores + [str(spread), spread_status]) + " |")
 lines.append("")
 
 lines.append("## 3. Active Blocking Objections")
@@ -903,9 +988,11 @@ if ambiguity_objs:
         lines.append(f"- **`{oid}`**: {oclaim} -> Clarification required from Moderator in manifest.")
     lines.append("")
 
-if agent_a_opt != agent_b_opt:
+unique_opts = set(opt for _, opt in agent_opts)
+if len(unique_opts) > 1:
     lines.append("### Option Divergence")
-    lines.append(f"- Agent A prefers `{agent_a_opt}`, while Agent B prefers `{agent_b_opt}`.")
+    summary_parts = ", ".join(f"{alabel} prefers `{opt}`" for alabel, opt in agent_opts)
+    lines.append(f"- {summary_parts}.")
     lines.append("- In Round N+1, proponents of non-baseline options MUST prove what critical production failure occurs if the baseline Option 0 is selected.")
     lines.append("- If changing positions, agents must explicitly cite the objection ID that influenced their revision.")
     lines.append("")
@@ -916,10 +1003,10 @@ if synthesized_options:
     for opt in synthesized_options:
         opt_id = opt.get("id")
         opt_title = opt.get("title", "")
-        opt_by = opt.get("proposed_by", "agent")
+        opt_by_anon = peer_to_anon.get(opt.get("proposed_by", ""), "a peer")
         opt_desc = opt.get("description", "")
         res_objs = ", ".join(f"`{x}`" for x in opt.get("resolves_objections", [])) or "None specified"
-        lines.append(f"- **`{opt_id}`** — **Title**: {opt_title} (Proposed by `{opt_by}`)")
+        lines.append(f"- **`{opt_id}`** — **Title**: {opt_title} (Proposed by `{opt_by_anon}`)")
         lines.append(f"  - **Description**: {opt_desc}")
         lines.append(f"  - **Resolves Objections**: {res_objs}")
     lines.append("")
@@ -928,7 +1015,7 @@ if synthesized_options:
 
 with open(digest_out, "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")
-' "$ROUND_DIR/tally.json" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/digest.md" "$MANIFEST"
+' "$ROUND_DIR/tally.json" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/digest.md" "$MANIFEST" "$GEMINI_BALLOT_PATH"
 fi
 
 echo "Round $ROUND_NUM completed successfully. Tally status: $TALLY_STATUS."
