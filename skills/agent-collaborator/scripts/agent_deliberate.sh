@@ -36,12 +36,38 @@ DELIBERATION_ID=""
 DELIBERATION_DIR=""
 JETSKI_EVIDENCE_OPT=""
 IS_CONTINUATION=false
+INIT_ONLY=false
+FINALIZE_ROUND=""
+CREATED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 GUIDANCE_TEXT=""
 ADD_OPTIONS=()
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --init)
+      INIT_ONLY=true
+      shift
+      ;;
+    --finalize)
+      if [[ -n "${2:-}" && "${2:-}" =~ ^[0-9]+$ && "${2:-}" -ge 1 ]]; then
+        FINALIZE_ROUND="$((10#$2))"
+        shift 2
+      else
+        echo "Error: --finalize requires a positive integer round number." >&2
+        exit 1
+      fi
+      ;;
+    --finalize=*)
+      RAW_FIN="${1#*=}"
+      if [[ "$RAW_FIN" =~ ^[0-9]+$ && "$RAW_FIN" -ge 1 ]]; then
+        FINALIZE_ROUND="$((10#$RAW_FIN))"
+      else
+        echo "Error: --finalize requires a positive integer round number." >&2
+        exit 1
+      fi
+      shift
+      ;;
     -r|--rounds|--max-rounds)
       ROUNDS_EXPLICIT=true
       if [[ -n "${2:-}" && "${2:-}" =~ ^[0-9]+$ ]]; then
@@ -203,6 +229,8 @@ while [[ $# -gt 0 ]]; do
       echo "  --id <ID>               Explicit deliberation ID (default: dlb-YYYYMMDD-XXXX)"
       echo "  -d, --dir <DIR>         Ledger directory (default: .agent/deliberations/<ID>)"
       echo "  --jetski-evidence <F>   Empirical test / benchmark evidence file"
+      echo "  --init                  Initialize ledger dir, manifest, and baseline, then exit"
+      echo "  --finalize <ROUND>      Generate final blueprint or dissent register from round tally"
       echo "  -h, --help              Show this help message"
       exit 0
       ;;
@@ -243,7 +271,7 @@ done
 CONTEXT_FILES=("${RESOLVED_CONTEXT_FILES[@]+"${RESOLVED_CONTEXT_FILES[@]}"}")
 
 # Resolve Deliberation Directory & ID based on mode
-if [ "$IS_CONTINUATION" = true ]; then
+if [ "$IS_CONTINUATION" = true ] || [ -n "$FINALIZE_ROUND" ]; then
   if [ -z "$DELIBERATION_DIR" ]; then
     if [ -n "$DELIBERATION_ID" ]; then
       if [ -d ".agent/deliberations/$DELIBERATION_ID" ]; then
@@ -499,6 +527,12 @@ if [ ! -f "$OPTION_0_FILE" ]; then
 EOF
 fi
 
+if [ "$INIT_ONLY" = true ]; then
+  echo "Initialized deliberation $DELIBERATION_ID"
+  echo "DELIBERATION_DIR=$DELIBERATION_DIR"
+  exit 0
+fi
+
 # Locate consensus_round.sh driver
 ROUND_DRIVER="${CONSENSUS_ROUND_SH:-}"
 if [ -z "$ROUND_DRIVER" ]; then
@@ -565,22 +599,38 @@ if os.path.exists(codex_path):
     with open(codex_path, "r", encoding="utf-8") as f:
         codex_ballot = json.load(f)
 
+gemini_ballot = {}
+gemini_path = os.path.join(round_dir, "gemini_ballot.json")
+has_gemini = os.path.exists(gemini_path)
+if has_gemini:
+    with open(gemini_path, "r", encoding="utf-8") as f:
+        gemini_ballot = json.load(f)
+
+peers = [("Claude", claude_ballot), ("Codex", codex_ballot)]
+if has_gemini or "gemini" in tally.get("participating_peers", []):
+    peers.append(("Gemini", gemini_ballot))
+
 delib_id = manifest.get("deliberation_id", "deliberation")
 topic = manifest.get("topic", "No topic specified")
 yagni_avg = tally.get("yagni_score_avg", 5.0)
 spreads = tally.get("score_spreads", {})
 max_rounds_val = manifest.get("max_rounds", 3)
 updated_at_val = manifest.get("updated_at", manifest.get("created_at", ""))
-
+reduced_quorum = tally.get("reduced_quorum", False)
+absent_peers = tally.get("absent_peers", [])
+invalid_peers = tally.get("invalid_peers", [])
 
 lines = []
-lines.append(f"# Multi-Agent Consensus Architecture Blueprint")
+lines.append("# Multi-Agent Consensus Architecture Blueprint")
 lines.append("")
 lines.append(f"- **Deliberation ID**: `{delib_id}`")
 lines.append(f"- **Topic**: {topic}")
 lines.append(f"- **Convergence Status**: `{status}`")
 lines.append(f"- **Converged Round**: Round {round_num} of {max_rounds_val}")
 lines.append(f"- **Selected Architecture**: `{consensus_opt}`")
+if reduced_quorum:
+    missing_list = ", ".join(absent_peers + invalid_peers) or "1 peer"
+    lines.append(f"- **Quorum**: 2/3 (reduced quorum — absent/invalid: {missing_list})")
 lines.append(f"- **Timestamp**: {updated_at_val}")
 lines.append("")
 lines.append("---")
@@ -590,20 +640,23 @@ lines.append("")
 lines.append(f"Deliberation converged on `{consensus_opt}` after {round_num} round(s) with unanimous peer acceptance and zero unaddressed blocking objections.")
 lines.append("")
 
-c_rat = claude_ballot.get("metrics", {}).get("technical_feasibility", {}).get("rationale", "")
-x_rat = codex_ballot.get("metrics", {}).get("technical_feasibility", {}).get("rationale", "")
-if c_rat or x_rat:
+rationales = []
+for pname, pballot in peers:
+    rat = pballot.get("metrics", {}).get("technical_feasibility", {}).get("rationale", "")
+    if rat:
+        rationales.append((pname, rat))
+if rationales:
     lines.append("### Peer Rationales:")
-    if c_rat:
-        lines.append(f"- **Claude**: {c_rat}")
-    if x_rat:
-        lines.append(f"- **Codex**: {x_rat}")
+    for pname, rat in rationales:
+        lines.append(f"- **{pname}**: {rat}")
     lines.append("")
 
 lines.append("## 2. Structured Metric Evaluation")
 lines.append("")
-lines.append("| Metric | Claude Score | Codex Score | Spread | Status |")
-lines.append("|---|---|---|---|---|")
+header_cols = ["Metric"] + [f"{pname} Score" for pname, _ in peers] + ["Spread", "Status"]
+sep_cols = ["---"] * len(header_cols)
+lines.append("| " + " | ".join(header_cols) + " |")
+lines.append("|" + "|".join(sep_cols) + "|")
 
 metric_keys = [
     ("technical_feasibility", "Technical Feasibility"),
@@ -614,11 +667,10 @@ metric_keys = [
 ]
 
 for key, label in metric_keys:
-    c_score = claude_ballot.get("metrics", {}).get(key, {}).get("score", "-")
-    x_score = codex_ballot.get("metrics", {}).get(key, {}).get("score", "-")
+    scores = [str(pballot.get("metrics", {}).get(key, {}).get("score", "-")) for _, pballot in peers]
     spread = spreads.get(key, 0)
     stat = "PASS" if spread <= 1 else "DISSENT"
-    lines.append(f"| {label} | {c_score} | {x_score} | {spread} | {stat} |")
+    lines.append("| " + " | ".join([label] + scores + [str(spread), stat]) + " |")
 
 lines.append("")
 lines.append(f"- **YAGNI & Parsimony Average**: `{yagni_avg} / 5.0` (Threshold: $\\ge 3.5$)")
@@ -686,10 +738,18 @@ if os.path.exists(codex_path):
     with open(codex_path, "r", encoding="utf-8") as f:
         codex_ballot = json.load(f)
 
+gemini_ballot = {}
+gemini_path = os.path.join(round_dir, "gemini_ballot.json")
+has_gemini = os.path.exists(gemini_path)
+if has_gemini:
+    with open(gemini_path, "r", encoding="utf-8") as f:
+        gemini_ballot = json.load(f)
+
 delib_id = manifest.get("deliberation_id", "deliberation")
 topic = manifest.get("topic", "No topic specified")
 c_pref = claude_ballot.get("preferred_option", "Unknown")
 x_pref = codex_ballot.get("preferred_option", "Unknown")
+g_pref = gemini_ballot.get("preferred_option", "Unknown")
 blocking_objs = tally.get("blocking_objections", [])
 over_arch_flags = tally.get("over_architecture_flags", [])
 spreads = tally.get("score_spreads", {})
@@ -716,6 +776,8 @@ lines.append("")
 lines.append("## 2. Divergent Preferred Options")
 lines.append(f"- **Claude Preferred Option**: `{c_pref}`")
 lines.append(f"- **Codex Preferred Option**: `{x_pref}`")
+if has_gemini or "gemini" in tally.get("participating_peers", []):
+    lines.append(f"- **Gemini Preferred Option**: `{g_pref}`")
 lines.append("")
 
 lines.append("## 3. Unresolved Blocking Objections")
@@ -761,7 +823,11 @@ lines.append("The human operator should review the trade-offs above and select a
 lines.append(f"1. **Option 0 (Minimal Viable Architecture)**: Enforce strict YAGNI parsimony baseline.")
 lines.append(f"2. **{c_pref} (Claude proposal)**: Accept Claude architectural model.")
 lines.append(f"3. **{x_pref} (Codex proposal)**: Accept Codex architectural model.")
-lines.append("4. **Custom Compromise**: Provide manual override directives in implementation plan.")
+if has_gemini or "gemini" in tally.get("participating_peers", []):
+    lines.append(f"4. **{g_pref} (Gemini proposal)**: Accept Gemini Peer architectural model.")
+    lines.append("5. **Custom Compromise**: Provide manual override directives in implementation plan.")
+else:
+    lines.append("4. **Custom Compromise**: Provide manual override directives in implementation plan.")
 lines.append("")
 
 with open(dissent_out, "w", encoding="utf-8") as f:
@@ -831,6 +897,212 @@ with open(prompt_out, "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")
 ' "$MANIFEST_FILE" "$DELIBERATION_DIR/round-$target_round/tally.json" "$prompt_path" "$target_round"
 }
+
+# Helper to finalize CONVERGED / CONVERGED_WITH_DISSENT round
+finalize_converged() {
+  local target_round="$1"
+  local round_tally="$DELIBERATION_DIR/round-$target_round/tally.json"
+  local consensus_opt
+  local yagni_avg
+  local reduced_quorum
+  local update_time
+
+  consensus_opt=$(jq -r '.consensus_option // empty' "$round_tally")
+  yagni_avg=$(jq -r '.yagni_score_avg // 0' "$round_tally")
+  reduced_quorum=$(jq -r '.reduced_quorum // false' "$round_tally")
+  update_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  jq \
+    --arg status "CONVERGED" \
+    --arg opt "$consensus_opt" \
+    --argjson round "$target_round" \
+    --arg updated_at "$update_time" \
+    '
+    .status = $status |
+    .consensus_option = $opt |
+    .converged_round = $round |
+    .updated_at = $updated_at
+    ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp" && mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
+
+  generate_final_blueprint "$target_round"
+
+  echo ""
+  echo "================================================================================"
+  echo "🎉 CONSENSUS REACHED: Multi-Agent Deliberation Blueprint Generated"
+  echo "================================================================================"
+  echo "Deliberation ID  : $DELIBERATION_ID"
+  echo "Topic            : $TOPIC"
+  echo "Converged Round  : Round $target_round of $MAX_ROUNDS"
+  echo "Consensus Option : $consensus_opt"
+  echo "YAGNI Score Avg  : $yagni_avg / 5.0 (Minimum: 3.5)"
+  if [ "$reduced_quorum" = "true" ]; then
+    echo "Quorum           : 2/3 (reduced quorum)"
+  fi
+  echo ""
+  echo "Structured Metric Table:"
+  echo "--------------------------------------------------------------------------------"
+
+  python3 -c '
+import sys, json, os
+
+tally = json.load(open(sys.argv[1]))
+round_dir = sys.argv[2]
+
+def load_b(name):
+    p = os.path.join(round_dir, f"{name}_ballot.json")
+    if os.path.exists(p):
+        try:
+            return json.load(open(p))
+        except Exception:
+            return {}
+    return {}
+
+claude = load_b("claude")
+codex = load_b("codex")
+gemini_path = os.path.join(round_dir, "gemini_ballot.json")
+has_gemini = os.path.exists(gemini_path) or "gemini" in tally.get("participating_peers", [])
+gemini = load_b("gemini") if has_gemini else {}
+
+peers = [("Claude", claude), ("Codex", codex)]
+if has_gemini:
+    peers.append(("Gemini", gemini))
+
+metric_hdr, spread_hdr, status_hdr = "Metric", "Spread", "Status"
+header = f"{metric_hdr:<32} " + " ".join(f"{name:<8}" for name, _ in peers) + f" {spread_hdr:<8} {status_hdr:<8}"
+print(header)
+print("-" * 80)
+
+metric_keys = [
+    ("technical_feasibility", "technical_feasibility"),
+    ("architectural_simplicity", "architectural_simplicity"),
+    ("yagni_and_parsimony", "yagni_and_parsimony"),
+    ("robustness_failure_modes", "robustness_failure_modes"),
+    ("maintainability_testability", "maintainability_testability")
+]
+
+spreads = tally.get("score_spreads", {})
+for key, label in metric_keys:
+    vals = [str(b.get("metrics", {}).get(key, {}).get("score", "-")) for _, b in peers]
+    sp = spreads.get(key, 0)
+    st = "PASS" if sp <= 1 else "DISSENT"
+    row = f"{label:<32} " + " ".join(f"{v:<8}" for v in vals) + f" {str(sp):<8} {st:<8}"
+    print(row)
+' "$round_tally" "$DELIBERATION_DIR/round-$target_round"
+
+  echo "--------------------------------------------------------------------------------"
+  echo "Final Blueprint  : $DELIBERATION_DIR/final_blueprint.md"
+  echo "Ledger Directory : $DELIBERATION_DIR"
+  echo "================================================================================"
+  echo ""
+  exit 0
+}
+
+# Helper to finalize DEADLOCK round
+finalize_deadlock() {
+  local target_round="$1"
+  local update_time
+  update_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  jq \
+    --arg status "DEADLOCK" \
+    --argjson round "$target_round" \
+    --arg updated_at "$update_time" \
+    '
+    .status = $status |
+    .deadlock_round = $round |
+    .updated_at = $updated_at
+    ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp" && mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
+
+  generate_dissent_register "$target_round"
+
+  echo ""
+  echo "================================================================================"
+  echo "🚨 DEADLOCK ESCALATION REPORT: Multi-Agent Deliberation Unresolved"
+  echo "================================================================================"
+  echo "Deliberation ID  : $DELIBERATION_ID"
+  echo "Topic            : $TOPIC"
+  echo "Rounds Executed  : $target_round of $MAX_ROUNDS"
+  echo "Status           : DEADLOCK"
+  echo ""
+
+  python3 -c '
+import sys, json, os
+
+def load_json(path, label):
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+            return {}
+    except Exception:
+        return {}
+
+round_dir = sys.argv[1]
+claude = load_json(os.path.join(round_dir, "claude_ballot.json"), "claude ballot")
+codex = load_json(os.path.join(round_dir, "codex_ballot.json"), "codex ballot")
+gemini_path = os.path.join(round_dir, "gemini_ballot.json")
+tally = load_json(os.path.join(round_dir, "tally.json"), "tally")
+has_gemini = os.path.exists(gemini_path) or "gemini" in tally.get("participating_peers", [])
+gemini = load_json(gemini_path, "gemini ballot") if has_gemini else {}
+
+c_p = claude.get("preferred_option", "Unknown")
+x_p = codex.get("preferred_option", "Unknown")
+g_p = gemini.get("preferred_option", "Unknown")
+
+print(f"Claude Preference : {c_p}")
+print(f"Codex Preference  : {x_p}")
+if has_gemini:
+    print(f"Gemini Preference : {g_p}")
+print("")
+print("Unresolved Blocking Objections:")
+objs = tally.get("blocking_objections", [])
+if objs:
+    for o in objs:
+        otype = o.get("type", "tradeoff").upper()
+        oid = o.get("id", "OBJ")
+        oclaim = o.get("claim", "")
+        print(f"  - [{otype}] {oid}: {oclaim}")
+else:
+    print("  - Disagreement on metric tradeoffs and architecture preferences.")
+print("")
+print("Human Tie-Breaker Options:")
+print("  [1] Option 0: Enforce Minimal Viable Architecture (MVA) baseline")
+print(f"  [2] Option A ({c_p}): Proceed with Claude proposal")
+print(f"  [3] Option B ({x_p}): Proceed with Codex proposal")
+if has_gemini:
+    print(f"  [4] Option C ({g_p}): Proceed with Gemini Peer proposal")
+    print("  [5] Custom Override: Settle tradeoff manually and override deliberation")
+else:
+    print("  [4] Custom Override: Settle tradeoff manually and override deliberation")
+' "$DELIBERATION_DIR/round-$target_round"
+
+  echo ""
+  echo "Dissent ledger recorded at: $DELIBERATION_DIR/dissent_register.md"
+  echo "================================================================================"
+  echo ""
+  exit 2
+}
+
+# Handle --finalize <ROUND_NUM> mode directly
+if [ -n "$FINALIZE_ROUND" ]; then
+  FIN_TALLY="$DELIBERATION_DIR/round-$FINALIZE_ROUND/tally.json"
+  if [ ! -f "$FIN_TALLY" ]; then
+    echo "Error: Cannot finalize round $FINALIZE_ROUND: tally.json not found at $FIN_TALLY" >&2
+    exit 1
+  fi
+  FIN_STATUS=$(jq -r '.status // "UNKNOWN"' "$FIN_TALLY")
+  if [ "$FIN_STATUS" = "CONVERGED" ] || [ "$FIN_STATUS" = "CONVERGED_WITH_DISSENT" ]; then
+    finalize_converged "$FINALIZE_ROUND"
+  elif [ "$FIN_STATUS" = "DEADLOCK" ]; then
+    finalize_deadlock "$FINALIZE_ROUND"
+  else
+    echo "Error: Round $FINALIZE_ROUND tally status is '$FIN_STATUS' (expected CONVERGED, CONVERGED_WITH_DISSENT, or DEADLOCK)." >&2
+    exit 1
+  fi
+fi
 
 # Main Deliberation Loop
 FINAL_STATUS="IN_DEBATE"
@@ -910,68 +1182,7 @@ for (( round=START_ROUND; round<=MAX_ROUNDS; round++ )); do
   # Case 1: Full Convergence or Convergence with Dissent
   if [ "$STATUS" = "CONVERGED" ] || [ "$STATUS" = "CONVERGED_WITH_DISSENT" ]; then
     CONVERGED_ROUND="$round"
-    UPDATE_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-
-    jq \
-      --arg status "CONVERGED" \
-      --arg opt "$CONSENSUS_OPT" \
-      --argjson round "$round" \
-      --arg updated_at "$UPDATE_TIME" \
-      '
-      .status = $status |
-      .consensus_option = $opt |
-      .converged_round = $round |
-      .updated_at = $updated_at
-      ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp" && mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
-
-    generate_final_blueprint "$round"
-
-    # Print Executive Summary Table to terminal
-    echo ""
-    echo "================================================================================"
-    echo "🎉 CONSENSUS REACHED: Multi-Agent Deliberation Blueprint Generated"
-    echo "================================================================================"
-    echo "Deliberation ID  : $DELIBERATION_ID"
-    echo "Topic            : $TOPIC"
-    echo "Converged Round  : Round $round of $MAX_ROUNDS"
-    echo "Consensus Option : $CONSENSUS_OPT"
-    echo "YAGNI Score Avg  : $YAGNI_AVG / 5.0 (Minimum: 3.5)"
-    echo ""
-    echo "Structured Metric Table:"
-    echo "--------------------------------------------------------------------------------"
-    printf "%-32s %-8s %-8s %-8s %-8s\n" "Metric" "Claude" "Codex" "Spread" "Status"
-    echo "--------------------------------------------------------------------------------"
-
-    python3 -c '
-import sys, json
-
-tally = json.load(open(sys.argv[1]))
-claude = json.load(open(sys.argv[2]))
-codex = json.load(open(sys.argv[3]))
-
-metric_keys = [
-    ("technical_feasibility", "technical_feasibility"),
-    ("architectural_simplicity", "architectural_simplicity"),
-    ("yagni_and_parsimony", "yagni_and_parsimony"),
-    ("robustness_failure_modes", "robustness_failure_modes"),
-    ("maintainability_testability", "maintainability_testability")
-]
-
-spreads = tally.get("score_spreads", {})
-for key, label in metric_keys:
-    c_s = claude.get("metrics", {}).get(key, {}).get("score", "-")
-    x_s = codex.get("metrics", {}).get(key, {}).get("score", "-")
-    sp = spreads.get(key, 0)
-    st = "PASS" if sp <= 1 else "DISSENT"
-    print(f"{label:<32} {str(c_s):<8} {str(x_s):<8} {str(sp):<8} {st:<8}")
-' "$ROUND_TALLY" "$DELIBERATION_DIR/round-$round/claude_ballot.json" "$DELIBERATION_DIR/round-$round/codex_ballot.json"
-
-    echo "--------------------------------------------------------------------------------"
-    echo "Final Blueprint  : $DELIBERATION_DIR/final_blueprint.md"
-    echo "Ledger Directory : $DELIBERATION_DIR"
-    echo "================================================================================"
-    echo ""
-    exit 0
+    finalize_converged "$round"
   fi
 
   # Case 2: In Debate -> Check for factual disputes and Jetski probe integration
@@ -1008,81 +1219,5 @@ for key, label in metric_keys:
 done
 
 # If loop completed without convergence, trigger Deadlock Escalation
-UPDATE_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 LAST_ROUND=$((round > MAX_ROUNDS ? MAX_ROUNDS : round))
-
-jq \
-  --arg status "DEADLOCK" \
-  --argjson round "$LAST_ROUND" \
-  --arg updated_at "$UPDATE_TIME" \
-  '
-  .status = $status |
-  .deadlock_round = $round |
-  .updated_at = $updated_at
-  ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp" && mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
-
-generate_dissent_register "$LAST_ROUND"
-
-echo ""
-echo "================================================================================"
-echo "🚨 DEADLOCK ESCALATION REPORT: Multi-Agent Deliberation Unresolved"
-echo "================================================================================"
-echo "Deliberation ID  : $DELIBERATION_ID"
-echo "Topic            : $TOPIC"
-echo "Rounds Executed  : $LAST_ROUND of $MAX_ROUNDS"
-echo "Status           : DEADLOCK"
-echo ""
-
-python3 -c '
-import sys, json, os
-
-def load_json(path, label):
-    if not os.path.exists(path):
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, dict):
-                return data
-            sys.stderr.write(f"Warning: Expected dict in {label} ({path}), got {type(data).__name__}\n")
-            return {}
-    except Exception as e:
-        sys.stderr.write(f"Warning: Failed to parse {label} ({path}): {e}\n")
-        return {}
-
-claude = load_json(sys.argv[1], "claude ballot")
-codex = load_json(sys.argv[2], "codex ballot")
-tally = load_json(sys.argv[3], "tally")
-
-c_p = claude.get("preferred_option", "Unknown")
-x_p = codex.get("preferred_option", "Unknown")
-
-print(f"Claude Preference : {c_p}")
-print(f"Codex Preference  : {x_p}")
-print("")
-print("Unresolved Blocking Objections:")
-objs = tally.get("blocking_objections", [])
-if objs:
-    for o in objs:
-        otype = o.get("type", "tradeoff").upper()
-        oid = o.get("id", "OBJ")
-        oclaim = o.get("claim", "")
-        print(f"  - [{otype}] {oid}: {oclaim}")
-else:
-    print("  - Disagreement on metric tradeoffs and architecture preferences.")
-print("")
-print("Human Tie-Breaker Options:")
-print("  [1] Option 0: Enforce Minimal Viable Architecture (MVA) baseline")
-print(f"  [2] Option A ({c_p}): Proceed with Claude proposal")
-print(f"  [3] Option B ({x_p}): Proceed with Codex proposal")
-print("  [4] Custom Override: Settle tradeoff manually and override deliberation")
-' "$DELIBERATION_DIR/round-$LAST_ROUND/claude_ballot.json" \
-  "$DELIBERATION_DIR/round-$LAST_ROUND/codex_ballot.json" \
-  "$DELIBERATION_DIR/round-$LAST_ROUND/tally.json"
-
-echo ""
-echo "Dissent ledger recorded at: $DELIBERATION_DIR/dissent_register.md"
-echo "================================================================================"
-echo ""
-
-exit 2
+finalize_deadlock "$LAST_ROUND"

@@ -743,5 +743,120 @@ M10_HAS_MANUAL=$(jq -e '.options[] | select(.id == "Option_Manual")' "$TEST10_DI
 [ -n "$M10_HAS_MANUAL" ] || { echo "FAIL: Option_Manual not found in manifest" >&2; exit 1; }
 echo "PASS: Test 10 - Add option verified."
 
+echo "=== Test 11: --init creates manifest and baseline without running rounds ==="
+TEST11_DIR="$TEMP_DIR/test11_delib"
+rm -f "$MOCK_LOGS/consensus_round_args.txt"
+OUTPUT11=$(bash "$DELIBERATE_SCRIPT" --init --id "dlb-init-11" --dir "$TEST11_DIR" "3-Peer Init Test Topic")
+EXIT11=$?
+[ "$EXIT11" -eq 0 ] || { echo "FAIL: --init exited $EXIT11, expected 0" >&2; exit 1; }
+[ -f "$TEST11_DIR/manifest.json" ] || { echo "FAIL: manifest.json missing after --init" >&2; exit 1; }
+[ -f "$TEST11_DIR/option_0_baseline.md" ] || { echo "FAIL: option_0_baseline.md missing after --init" >&2; exit 1; }
+[ ! -f "$MOCK_LOGS/consensus_round_args.txt" ] || { echo "FAIL: --init should not invoke consensus_round.sh" >&2; exit 1; }
+echo "PASS: Test 11 - --init verified."
+
+echo "=== Test 12: --finalize on 3-Peer CONVERGED generates 3-column blueprint & reduced_quorum notice ==="
+mkdir -p "$TEST11_DIR/round-1"
+for peer in claude codex gemini; do
+  cat <<INNER > "$TEST11_DIR/round-1/${peer}_ballot.json"
+{
+  "deliberation_id": "dlb-init-11",
+  "round": 1,
+  "agent": "$peer",
+  "preferred_option": "Option_0",
+  "stance": "ACCEPT",
+  "metrics": {
+    "technical_feasibility": {"score": 5, "confidence": 0.9, "rationale": "$peer rationale"},
+    "architectural_simplicity": {"score": 5, "confidence": 0.9, "rationale": "Simple"},
+    "yagni_and_parsimony": {"score": 5, "confidence": 0.9, "cognitive_overhead": "LOW", "indirection_layers": 0, "rationale": "Minimal"},
+    "robustness_failure_modes": {"score": 4, "confidence": 0.85, "rationale": "Safe"},
+    "maintainability_testability": {"score": 5, "confidence": 0.9, "rationale": "Testable"}
+  },
+  "over_architecture_flags": [],
+  "blocking_objections": [],
+  "position_changes": []
+}
+INNER
+done
+cat <<'EOF' > "$TEST11_DIR/round-1/tally.json"
+{
+  "deliberation_id": "dlb-init-11",
+  "round": 1,
+  "max_rounds": 3,
+  "status": "CONVERGED",
+  "consensus_option": "Option_0",
+  "yagni_score_avg": 5.0,
+  "score_spreads": {
+    "technical_feasibility": 0,
+    "architectural_simplicity": 0,
+    "yagni_and_parsimony": 0,
+    "robustness_failure_modes": 0,
+    "maintainability_testability": 0
+  },
+  "blocking_objections": [],
+  "over_architecture_flags": [],
+  "participating_peers": ["claude", "codex", "gemini"],
+  "absent_peers": [],
+  "invalid_peers": [],
+  "quorum_met": true,
+  "reduced_quorum": false
+}
+EOF
+
+OUTPUT12=$(bash "$DELIBERATE_SCRIPT" --finalize 1 --dir "$TEST11_DIR")
+EXIT12=$?
+[ "$EXIT12" -eq 0 ] || { echo "FAIL: --finalize CONVERGED exited $EXIT12, expected 0" >&2; exit 1; }
+[ -f "$TEST11_DIR/final_blueprint.md" ] || { echo "FAIL: final_blueprint.md missing after --finalize" >&2; exit 1; }
+grep -q "Gemini Score" "$TEST11_DIR/final_blueprint.md" || { echo "FAIL: final_blueprint.md missing Gemini Score column" >&2; exit 1; }
+echo "$OUTPUT12" | grep -q "Gemini" || { echo "FAIL: terminal summary missing Gemini column" >&2; exit 1; }
+
+# Verify reduced_quorum notice
+jq '.reduced_quorum = true | .participating_peers = ["claude", "gemini"] | .absent_peers = ["codex"]' "$TEST11_DIR/round-1/tally.json" > "$TEST11_DIR/round-1/tally_rq.json"
+mv "$TEST11_DIR/round-1/tally_rq.json" "$TEST11_DIR/round-1/tally.json"
+OUTPUT12B=$(bash "$DELIBERATE_SCRIPT" --finalize 1 --dir "$TEST11_DIR")
+grep -qi "reduced quorum" "$TEST11_DIR/final_blueprint.md" || { echo "FAIL: final_blueprint.md missing reduced quorum notice" >&2; exit 1; }
+echo "PASS: Test 12 - --finalize 3-peer CONVERGED and reduced_quorum verified."
+
+echo "=== Test 13: --finalize on 3-Peer DEADLOCK generates dissent_register with Gemini ==="
+TEST13_DIR="$TEMP_DIR/test13_delib"
+bash "$DELIBERATE_SCRIPT" --init --id "dlb-dead-13" --dir "$TEST13_DIR" "3-Peer Deadlock Test" >/dev/null
+mkdir -p "$TEST13_DIR/round-2"
+cp "$TEST11_DIR/round-1/claude_ballot.json" "$TEST13_DIR/round-2/claude_ballot.json"
+cp "$TEST11_DIR/round-1/codex_ballot.json" "$TEST13_DIR/round-2/codex_ballot.json"
+jq '.preferred_option = "Option_A" | .stance = "BLOCK"' "$TEST11_DIR/round-1/gemini_ballot.json" > "$TEST13_DIR/round-2/gemini_ballot.json"
+cat <<'EOF' > "$TEST13_DIR/round-2/tally.json"
+{
+  "deliberation_id": "dlb-dead-13",
+  "round": 2,
+  "max_rounds": 2,
+  "status": "DEADLOCK",
+  "consensus_option": null,
+  "yagni_score_avg": 5.0,
+  "score_spreads": {
+    "technical_feasibility": 0,
+    "architectural_simplicity": 0,
+    "yagni_and_parsimony": 0,
+    "robustness_failure_modes": 0,
+    "maintainability_testability": 0
+  },
+  "blocking_objections": [],
+  "over_architecture_flags": [],
+  "participating_peers": ["claude", "codex", "gemini"],
+  "absent_peers": [],
+  "invalid_peers": [],
+  "quorum_met": true,
+  "reduced_quorum": false
+}
+EOF
+
+set +e
+OUTPUT13=$(bash "$DELIBERATE_SCRIPT" --finalize 2 --dir "$TEST13_DIR" 2>&1)
+EXIT13=$?
+eval "$SET_E"
+[ "$EXIT13" -eq 2 ] || { echo "FAIL: --finalize DEADLOCK exited $EXIT13, expected 2" >&2; exit 1; }
+[ -f "$TEST13_DIR/dissent_register.md" ] || { echo "FAIL: dissent_register.md missing after --finalize DEADLOCK" >&2; exit 1; }
+grep -q "Gemini Preferred Option" "$TEST13_DIR/dissent_register.md" || { echo "FAIL: dissent_register.md missing Gemini Preferred Option" >&2; exit 1; }
+echo "$OUTPUT13" | grep -q "Gemini Preference" || { echo "FAIL: terminal deadlock output missing Gemini Preference" >&2; exit 1; }
+echo "PASS: Test 13 - --finalize 3-peer DEADLOCK verified."
+
 echo "All agent_deliberate tests passed successfully!"
 
