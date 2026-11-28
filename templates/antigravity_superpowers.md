@@ -48,8 +48,9 @@ Since Superpowers/Antigravity are driven by your project's `AGENTS.md`, `--proje
 # 🤝 Multi-Agent Peer Collaboration & Verification Protocol
 
 ## 1. Roles & Division of Labor
-- **Central Orchestrator (Antigravity / Gemini)**: Full context awareness, toolchain execution, TDD implementation, and fallback.
-- **Peer Advisory Council (Claude CLI / OpenAI Codex / Custom)**:
+- **Central Orchestrator (Antigravity / Gemini Main)**: Full context awareness, toolchain execution, TDD implementation, cross-model synthesis, and neutral deliberation host (non-voting).
+- **Peer Advisory Council (Gemini Native Subagent + Claude CLI + OpenAI Codex / Custom)**:
+  - `invoke_subagent` (`TypeName: "research"`, `Model: "inherit"`): Fresh-context, read-only **Gemini Peer Subagent** (`Gemini Brainstormer` / `Gemini Architect` / `Gemini Spec Reviewer` / `Gemini Code Reviewer` / `Gemini Deliberation Peer`) dispatched concurrently alongside available external CLIs.
   - `claude-brainstorm [--model <model>] [-c]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`): Ideation & approach trade-offs (2-3 distinct approaches)
   - `codex-brainstorm [--model <model>] [-c]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`): Engineering feasibility, standard library alternatives & contrarian perspectives
   - `claude-design [--model <model>] [-c]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`): Architectural design & state-machine exploration
@@ -94,26 +95,31 @@ flowchart TD
         V["4. Verification (End-to-End Proof & Delivery)"]
     end
 
-    subgraph PeerAdvisors["🏛️ Peer Advisory Council (Claude / Codex / Jetski)"]
+    subgraph PeerAdvisors["🏛️ Peer Advisory Council (Gemini Subagent / Claude / Codex / Jetski)"]
+        GS["invoke_subagent (research)<br/>(Gemini Peer: Fresh-Context Design, Review & Ballot)"]
         CB["claude-brainstorm<br/>(Divergent Ideation & Trade-offs)"]
         XB["codex-brainstorm<br/>(Engineering Feasibility & Minimal Design)"]
         CD["claude-design<br/>(Architecture Validation & Boundary Check)"]
-        AD["agent-deliberate<br/>(Multi-Agent Consensus Deliberation)"]
+        AD["agent-deliberate<br/>(3-Peer Consensus Deliberation)"]
         CR["claude-refine<br/>(Spec & Prompt Refinement)"]
         CW["claude-review<br/>(Strict Git Diff Code Review)"]
         CO["codex-optimize<br/>(Perf/Algorithmic & Terminal Automation)"]
         CF["claude-followup / codex-followup<br/>(Multi-Turn Session Continuation)"]
     end
 
+    B -.-> GS
     B -.-> CB
     B -.-> XB
     B -.-> CD
     B -.-> AD
+    P -.-> GS
     P -.-> CR
     P -.-> CF
+    T -.-> GS
     T -.-> CW
     T -.-> CO
     T -.-> CF
+    GS --> V
     CW --> V
     CO --> V
 ```

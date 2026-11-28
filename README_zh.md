@@ -1,6 +1,6 @@
 # 🤝 Agent Collaborator (多代理人協同架構 Skill & CLI)
 
-> **以 Antigravity 作為總指揮核心（Central Orchestrator），調度 Claude CLI / OpenAI Codex 外部專家的多代理人深度協作與交叉驗證系統。**
+> **以 Antigravity 作為總指揮核心（Central Orchestrator），併發調度原生 Gemini Peer Subagent（`invoke_subagent`）與外部專家（Claude CLI / OpenAI Codex）的三模型深度協作與交叉驗證系統。**
 > 具備自動優雅降級（Graceful Fallback）、模組化安裝與 Superpowers 工作流無縫整合。
 
 [English Documentation](README.md)
@@ -83,11 +83,12 @@ flowchart TD
 
 當面臨重大架構取捨、分歧的實作提案或高風險技術決策時，透過環狀拓撲結構在 Claude（架構師與邊界獵人）與 Codex（務實紅隊與 YAGNI 看門狗）之間發起嚴謹辯論，由 Antigravity 擔任中立主持人，並由 Jetski 提供實證測試支援。
 
-#### 1. 環狀拓撲與角色分工
-- **Antigravity (Gemini - 研討主持人 / Neutral Host)**：定義討論主題、候選方案與強制性 **Option 0** 極簡基線；生成每輪匿名摘要 (`digest.md`)；以確定性 `jq` 計分規則客觀統計投票；在達成共識時生成最終架構藍圖 (`final_blueprint.md`)。不參與投票以避免主觀偏見。
-- **Claude CLI (架構師與邊界獵人 / Architect & Edge-Case Hunter)**：評估系統拓撲、模組邊界、正規狀態機、故障隔離與回歸預防。
-- **OpenAI Codex CLI (務實紅隊與 YAGNI 看門狗 / Pragmatic Red Team & YAGNI Watchdog)**：審查程式碼簡約度、標準庫替代方案、效能效率與過度架構風險，堅決剔除無效抽象。
-- **Jetski Native Subagent (實證測試探針 / Empirical Spike Probe)**：當模型雙方出現事實性爭議或 API / 效能假設分歧時，自動生成實證指引 (`jetski_evidence_prompt.md`) 執行即用即丟的測試或基準探針，以客觀事實終結爭辯。
+#### 1. 環狀拓撲與角色分工（3-Peer 共識 + 2-of-3 存活 Quorum）
+- **Antigravity 主代理（研討主持人 / Neutral Host — 不投票）**：定義討論主題、候選方案與強制性 **Option 0** 極簡基線；併發派發各模型；驗證並原子寫入 `gemini_ballot.json`；以確定性 `jq` 計分規則客觀統計投票；在達成共識時生成最終架構藍圖 (`final_blueprint.md`)。
+- **Gemini Peer Subagent（Antigravity 原生 `invoke_subagent` 唯讀 `research` — 獨立投票者）**：在乾淨獨立的 context 中與 Claude、Codex 併發評分並投出同等權重選票（`gemini_ballot.json`）。若 Claude 或 Codex 其中一個不可用，Gemini + 另一位仍可構成有效 **2-of-3 存活 quorum**（標記 `reduced_quorum: true`）而非直接降級。
+- **Claude CLI（架構師與邊界獵人 — 獨立投票者）**：評估系統拓撲、模組邊界、正規狀態機、故障隔離與回歸預防。
+- **OpenAI Codex CLI（務實紅隊與 YAGNI 看門狗 — 獨立投票者）**：審查程式碼簡約度、標準庫替代方案、效能效率與過度架構風險，堅決剔除無效抽象。
+- **Jetski Native Subagent（實證測試探針 — 不投票）**：當投票者出現 `factual` 事實性爭議或效能假設分歧時，自動生成實證指引 (`jetski_evidence_prompt.md`) 執行即用即丟的測試或基準探針，以客觀事實終結爭辯。
 
 #### 2. 結構化指標評分表與防過度架構否決權 (Parsimony Veto)
 所有投票模型皆依據五大核心維度進行評分（1 至 5 分）：

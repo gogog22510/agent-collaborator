@@ -22,7 +22,11 @@
     - *Informational Q&A Exemption (Both Modes)*:
       - Pure conceptual queries, codebase explanations, architecture walkthroughs, and syntax questions that do NOT modify code or fix bugs are EXEMPT from heavy engineering workflows and must be answered directly.
 
-- **Peer Advisory Council (External Specialized Agents)**:
+- **Peer Advisory Council (Tri-Model: Gemini Native Subagent + External Specialized Agents)**:
+  - **Gemini Peer Subagent (Antigravity Native `invoke_subagent`)**:
+    - *Isolated Fresh-Context Peer*: In Antigravity, ALWAYS dispatch a read-only `research` subagent (`invoke_subagent`, `TypeName: "research"`, `Model: "inherit"`) concurrently alongside available external CLIs so Gemini contributes an independent perspective free of main-thread confirmation bias.
+    - *Task Roles*: Assign a clear role (`Gemini Brainstormer`, `Gemini Architect`, `Gemini Spec Reviewer`, `Gemini Code Reviewer`, `Gemini Performance Reviewer`, or `Gemini Deliberation Peer`).
+    - *Code Review Input*: Because `research` subagents are read-only and do not run shell commands, pass the `git diff` (or changed file paths + diff summary) directly in the subagent prompt.
   - **Claude CLI (`agent-collaborator`)**:
     - *Ideation & Approach Trade-offs*: `claude-brainstorm [--model <model>] [-c] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`)
     - *System Architecture & State Machines*: `claude-design [--model <model>] [-c] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`)
@@ -47,43 +51,43 @@
 >    - **Sandbox Error Handling**: If an execution ever fails with Exit 126, "Operation not permitted", or outputs `❌ [SANDBOX_BLOCKED]`, it indicates standard sandbox mode blocked the host binary. Immediately re-run with `BypassSandbox: true`. DO NOT trigger fallback for sandbox errors.
 > 2. **Claude Code CLI (`claude` as Central Orchestrator)**:
 >    - When running directly in Claude Code CLI, Claude is the primary orchestrator! It executes Superpowers skills directly (`superpowers:brainstorming`, `superpowers:systematic-debugging`, etc.).
->    - Claude CLI does **NOT** call `claude-brainstorm`, `claude-design` or `claude-review` on itself (avoiding nested recursive sessions). Instead, it can consult `codex-brainstorm` / `codex-optimize` for engineering feasibility, algorithmic/terminal tasks, or perform native verification.
+>    - Claude CLI does **NOT** call `claude-brainstorm`, `claude-design` or `claude-review` on itself (avoiding nested recursive sessions), and does NOT use Antigravity's `invoke_subagent`. Instead, it can consult `codex-brainstorm` / `codex-optimize` for engineering feasibility, algorithmic/terminal tasks, or perform native verification.
 
 ---
 
 ## 2. Mandatory Lifecycle Dispatch Points
 
-At each engineering milestone, the Orchestrator MUST consult external peer agents:
+At each engineering milestone (when running in Antigravity), dispatch **Gemini Peer Subagent (`invoke_subagent`, `TypeName: "research"`) concurrently in the same turn alongside available external CLIs (`claude-*` / `codex-*`)**, then wait for all peers to return and synthesize their perspectives together:
 
 1. **Brainstorming & Ideation Phase**:
-   - When exploring new features or major designs, run `claude-brainstorm` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`) to explore 2-3 distinct approaches, architectural trade-offs, and critical risks.
-   - For technical feasibility, ecosystem/standard-library alternatives, or a contrarian perspective, run `codex-brainstorm` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`).
+   - Dispatch `invoke_subagent` (`TypeName: "research"`, `Role: "Gemini Brainstormer"`) for an independent fresh-context exploration of approaches, trade-offs, and risks.
+   - Concurrently (when available), run `claude-brainstorm` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`) for divergent ideation and `codex-brainstorm` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_brainstorm.sh`) for engineering feasibility, standard-library alternatives, or a contrarian perspective.
 2. **Architecture & State Machine Phase**:
-   - Before finalizing design docs or making non-trivial architectural decisions, run `claude-design` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`) to validate state-machine transitions, component boundaries, and failure modes.
+   - Dispatch `invoke_subagent` (`TypeName: "research"`, `Role: "Gemini Architect"`) concurrently with `claude-design` (when available) to validate state-machine transitions, component boundaries, and failure modes.
 3. **Specification & Schema Phase**:
-   - When writing complex JSON schemas, prompt templates, or API contracts, run `claude-refine` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_refine.sh`) to optimize clarity and remove ambiguity.
+   - Dispatch `invoke_subagent` (`TypeName: "research"`, `Role: "Gemini Spec Reviewer"`) concurrently with `claude-refine` (when available) to optimize clarity, schema rigor, and remove ambiguity.
 4. **Pre-flight Code Review Phase (Before Task Completion)**:
-   - Before claiming any feature or major bugfix is complete, run `claude-review HEAD` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_review.sh HEAD`) to check for regressions, memory leaks, missing edge cases, and test gaps.
+   - Dispatch `invoke_subagent` (`TypeName: "research"`, `Role: "Gemini Code Reviewer"`, including `git diff HEAD` / changed file paths in the prompt) concurrently with `claude-review HEAD` (when available) to check for regressions, memory leaks, missing edge cases, and test gaps.
 5. **Performance / Algorithmic / Automation Phase**:
-   - Before finalizing a hot-path implementation, or when a task is heavy shell/CI/terminal automation, run `codex-optimize` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/codex_optimize.sh`) to get Codex's optimization pass instead of Claude's.
+   - Dispatch `invoke_subagent` (`TypeName: "research"`, `Role: "Gemini Performance Reviewer"`) concurrently with `codex-optimize` (when available) for hot-path analysis or heavy shell/CI/terminal automation.
 6. **Multi-Agent Consensus Deliberation Phase**:
-   - When facing architectural disputes, complex design trade-offs, or high-stakes system designs, run `agent-deliberate` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/agent_deliberate.sh`) to conduct a multi-turn, ring-structured deliberation among Claude, Codex, and Jetski against the structured metric table.
+   - When facing architectural disputes, complex design trade-offs, or high-stakes system designs, run a 3-peer ring-structured deliberation among **Gemini Peer Subagent**, **Claude CLI**, and **Codex CLI** (with **Jetski** as non-voting empirical spike probe) using `agent-deliberate` / `consensus-round` (see Section 7).
 
 ---
 
 ## 3. Asynchronous Coordination & Anti-Premature Completion Protocol
 
-Because external peer agent CLIs perform deep LLM reasoning, commands typically take 15–30 seconds and will execute as **background tasks** in Antigravity.
+Because native Gemini subagents (`invoke_subagent`) and external peer agent CLIs perform deep LLM reasoning, they run asynchronously in the background.
 
 1. **Strictly Prohibit Premature Milestone Completion**:
-   - While `claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-review`, or `agent-deliberate` is running in the background, the milestone is **IN PROGRESS, NOT COMPLETE**.
-   - You **MUST NOT** finalize `implementation_plan.md`, declare "設計已完成" (design completed) or "審查已通過" (review passed), or prompt the user for execution approval while the task is still executing.
+   - While any dispatched **Gemini Peer Subagent** (`invoke_subagent`) or external CLI (`claude-brainstorm`, `codex-brainstorm`, `claude-design`, `claude-review`, `agent-deliberate`, `consensus-round`) is still running, the milestone is **IN PROGRESS, NOT COMPLETE**.
+   - You **MUST NOT** finalize `implementation_plan.md`, declare "設計已完成" (design completed) or "審查已通過" (review passed), or prompt the user for execution approval while any peer is still executing.
 2. **Turn Yielding & Reactive Wake-Up**:
-   - When `run_command` moves to the background: output a brief status update (e.g., *"已啟動 `claude-brainstorm` 進行發散思維與方案評估，等待 Claude 分析完成以整合至計畫中..."*) and **STOP calling tools immediately** to end your turn.
-   - Do NOT poll or busy-wait. The Antigravity reactive messaging system will automatically wake you up when the peer agent finishes.
+   - Launch the Gemini Peer Subagent and available external CLI commands **in the same turn**, output a brief status update (e.g., *"已併發啟動 Gemini Subagent 與 `claude-design` 進行架構諮詢，等待所有回報完成後整合至計畫中..."*), and **STOP calling tools immediately** to end your turn.
+   - Do NOT poll or busy-wait. The Antigravity reactive messaging system will automatically wake you up as each peer finishes. Wait until ALL dispatched peers have returned before synthesizing.
    - **Heartbeat & Long-Running Opus Calls**: Claude wrappers emit a startup metadata line (`model`, `effort`, `prompt_bytes`) and a 30s stderr heartbeat (`still waiting for Claude CLI (Xs elapsed)...`). If a notification fires while `claude-design` / `claude-brainstorm` is running on Opus with large multi-file context (which can legitimately take 3–8 minutes), check the task log: **active heartbeats mean the process is healthy and waiting on the API — do NOT prematurely kill it as hung**. If faster turnaround is needed, pass `--effort medium` or `--model sonnet` on invocation.
-3. **Mandatory Synthesis**:
-   - Upon wake-up with peer output, thoroughly examine recommendations, incorporate identified edge cases and failure modes into `implementation_plan.md`, and only then present the synthesized plan to the user.
+3. **Mandatory Cross-Model Synthesis**:
+   - Upon wake-up with all peer outputs, compare agreements, conflicting trade-offs, and unique edge cases caught by Gemini Peer, Claude, and Codex; incorporate them into `implementation_plan.md`, and only then present the synthesized plan to the user.
 
 ---
 
@@ -121,24 +125,26 @@ To extend this workflow with additional external models beyond Claude CLI and Co
     1. The script will emit `⚠️ [FALLBACK_TRIGGERED: ...]` and exit with code `100`.
     2. The Orchestrator (Antigravity) will output a non-blocking log:
        *"External peer agent [AgentName] unavailable. Seamlessly switching to internal reasoning."*
-    3. The Orchestrator immediately performs the review, design, or refinement internally.
+    3. The Orchestrator proceeds using the **Gemini Peer Subagent's** independent review (if dispatched) or performs the review, design, or refinement internally.
     4. **The workflow must NEVER crash, hang, or halt due to external API limits.**
 
 ---
 
 ## 7. Multi-Agent Consensus Deliberation Protocol (`agent-deliberate`)
 
-When facing major architectural trade-offs, conflicting implementation designs, or contentious technical decisions, the Orchestrator initiates a structured consensus deliberation using `agent-deliberate`.
+When facing major architectural trade-offs, conflicting implementation designs, or contentious technical decisions, the Orchestrator initiates a structured 3-peer consensus deliberation using `agent-deliberate` and `consensus-round`.
 
 ### 1. Ring Topology & Role Division
-- **Antigravity (Gemini Main Agent / Discussion Moderator)**:
-  - **Neutral Host**: Frames the topic and candidate options, defines the mandatory **Option 0** baseline, generates anonymized round digests (`digest.md`), deterministically tallies ballots with `jq`, and synthesizes the final blueprint (`final_blueprint.md`). Does not cast a subjective vote in peer rounds to prevent confirmation bias.
-- **Claude Agent (`claude` CLI - Architect & Edge-Case Hunter)**:
+- **Antigravity Main Agent (Discussion Moderator — Non-Voting)**:
+  - **Neutral Host**: Frames the topic and candidate options, defines the mandatory **Option 0** baseline, dispatches peers concurrently, validates and atomically writes `gemini_ballot.json`, runs deterministic `jq` tallying, and synthesizes the final blueprint (`final_blueprint.md`). Does **not** cast a subjective vote.
+- **Gemini Peer Subagent (`invoke_subagent`, `TypeName: "research"` — Independent Voting Peer)**:
+  - **Fresh-Context Voting Peer**: Runs in an isolated, read-only context receiving only the raw topic, options, context files, and (for Round > 1) the anonymized `digest.md` — never the Moderator's personal leanings. Casts an equal structured ballot (`gemini_ballot.json`).
+- **Claude Agent (`claude` CLI — Architect & Edge-Case Hunter)**:
   - **Independent Voting Peer**: Focuses on high-level system topology, module boundaries, formal state machines, failure modes, and regression prevention. Evaluates proposals and registers blocking objections or architectural flags.
-- **Codex Agent (`codex` CLI - Pragmatic Red Team & YAGNI Watchdog)**:
+- **Codex Agent (`codex` CLI — Pragmatic Red Team & YAGNI Watchdog)**:
   - **Independent Voting Peer / Red Team**: Focuses on codebase simplicity, standard-library alternatives, performance/resource efficiency, terminal/CI automation, and over-architecture audits. Challenges speculative abstractions and enforces YAGNI.
-- **Jetski Agent (Antigravity Native Subagent - Empirical Spike Probe)**:
-  - **Empirical Evidence Collector**: Gathers ground truth when factual claims, benchmark performance, or API behaviors are disputed. Runs throwaway spikes, tests, or profiling scripts. Does not cast a subjective vote (preventing Gemini double-voting).
+- **Jetski Agent (Antigravity Native Subagent — Empirical Spike Probe, Non-Voting)**:
+  - **Empirical Evidence Collector**: Gathers ground truth only when `factual` blocking objections are disputed. Runs throwaway spikes, tests, or profiling scripts. Does **not** cast a subjective vote.
 
 ### 2. Structured Metric Table & Ballot Schema
 All voting peers score proposals against five core metrics (scale 1-5):
@@ -159,30 +165,39 @@ Each ballot also registers:
 - **Mandatory Option 0 MVA Baseline**: Round 1 requires defining `Option_0` (Minimal Viable Architecture using native/OS primitives with zero speculative abstractions). Any alternative option bears a complexity tax and must justify why Option 0 is insufficient.
 - **Parsimony Veto**: Any proposal whose average `yagni_and_parsimony` score is below `3.5`, or has unaddressed `over_architecture_flags`, is disqualified from consensus. Proponents must either simplify the design in the next round or prove strict necessity.
 
-### 4. Deterministic Convergence & Bounded Termination
+### 4. Deterministic Convergence, 2-of-3 Survival Quorum & Bounded Termination
+- **Quorum Rule**: At least **2 valid ballots** are required (`quorum_met: true`). In 3-peer mode, if one external CLI fails or is unavailable while Gemini Peer + the surviving CLI succeed, deliberation proceeds as a valid **reduced quorum** (`reduced_quorum: true`, with `absent_peers` / `invalid_peers` recorded in `tally.json`). Only 0 or 1 valid ballots degrade to `DEGRADED`.
 - **Deterministic Convergence Gate (`CONVERGED`)**:
-  - Unanimous `preferred_option` across all voting peers.
-  - Zero open `BLOCK` stances.
-  - Score spread $\le 1.0$ across all core metrics.
-  - Average `yagni_and_parsimony` $\ge 3.5$.
+  - Unanimous `preferred_option` across all participating valid voting peers.
+  - Zero open `BLOCK` stances, active blocking objections, or active over-architecture flags.
+  - Score spread (`max - min`) $\le 1.0$ across all 5 core metrics.
+  - Per-peer `yagni_and_parsimony` $\ge 3.0$ and average `yagni_and_parsimony` $\ge 3.5$.
 - **Bounded Termination (`MAX_ROUNDS=3` -> `DEADLOCK`)**:
   - Deliberation is strictly bounded to `MAX_ROUNDS` (default: 3 rounds).
   - Round 1 is blind (eliminates anchoring bias).
-  - Subsequent rounds distribute an anonymized digest (`digest.md`) addressing specific objection IDs.
+  - Subsequent rounds distribute an anonymized digest (`digest.md` using `Agent A` / `Agent B` / `Agent C`) addressing specific objection IDs.
   - If unconverged after `MAX_ROUNDS`, the process terminates with status `DEADLOCK`, outputs `dissent_register.md` capturing irreconcilable trade-offs and empirical data, and escalates to the human operator for tie-breaking.
 
-### 5. CLI Usage & Commands
+### 5. CLI Usage & Antigravity 3-Peer Orchestration Flow
 ```bash
-# Full multi-round deliberation runner:
+# Antigravity 3-Peer Flow (Gemini Native Subagent + Claude + Codex in parallel):
+# 1. Initialize ledger directory:
+agent-deliberate --init [--rounds 3] [--add-option "..."] "<TOPIC_OR_REQUIREMENT>" [CONTEXT_FILES...]
+
+# 2. For each round N (in the SAME turn):
+#    - Run external CLIs without tallying:
+consensus-round --no-tally [--model-claude <M>] [--model-codex <M>] <DELIBERATION_DIR> <N>
+#    - Concurrently call invoke_subagent (TypeName: "research", Role: "Gemini Deliberation Peer")
+#      with topic, option_0_baseline.md, manifest.json, context files, templates/deliberation_prompt.md,
+#      and (for N > 1) round-(N-1)/digest.md + round-(N-1)/gemini_ballot.json.
+# 3. Yield turn until both return; validate Gemini's JSON ballot with jq and write
+#    <DELIBERATION_DIR>/round-<N>/gemini_ballot.json (and .md) atomically.
+# 4. Run deterministic 3-peer tally + anonymized digest:
+consensus-round --tally-only --gemini-ballot <DELIBERATION_DIR>/round-<N>/gemini_ballot.json <DELIBERATION_DIR> <N>
+# 5. Once tally.json reaches CONVERGED, CONVERGED_WITH_DISSENT, or DEADLOCK:
+agent-deliberate --finalize <N> --dir <DELIBERATION_DIR>
+
+# Standalone 2-Peer CLI-Only Runner (backward-compatible):
 agent-deliberate [--rounds 3] [--model-claude <model>] [--model-codex <model>] "<TOPIC_OR_REQUIREMENT>" [CONTEXT_FILES...]
-
-# Resuming / Continuing deliberation with steering guidance:
 agent-deliberate -c [--dir <DIR> | --id <ID>] [--guidance "<guidance_text>"] [--add-option "<json_or_title>"]
-
-# Example:
-agent-deliberate --rounds 3 "Design an in-memory cache strategy with TTL eviction for CLI tools"
-agent-deliberate -c --dir .agent/deliberations/dlb-20261020-abcd --guidance "Prioritize optimistic locking and lightweight repair"
-
-# Single-round concurrent driver (executes Claude and Codex concurrently):
-consensus-round [--max-rounds 3] [--model-claude <model>] [--model-codex <model>] <DELIBERATION_DIR> <ROUND_NUM>
 ```

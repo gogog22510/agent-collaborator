@@ -9,6 +9,10 @@ This skill enables a universal, language-agnostic **Multi-Agent / Dual-Agent Wor
 
 ## Roles & Division of Labor
 
+- **Gemini Peer Subagent (Antigravity Native `invoke_subagent`)**:
+  - Dispatched in Antigravity with `TypeName: "research"` (read-only, fresh isolated context) and `Model: "inherit"` concurrently alongside available Claude / Codex CLIs across Brainstorm, Design, Refine, Review, Optimize, and Deliberation milestones.
+  - Provides an independent Gemini perspective free of main-thread confirmation bias, and remains active even when external CLIs are unavailable or rate-limited.
+  - For Code Review, the Orchestrator includes `git diff` / changed file paths in the prompt since `research` subagents are read-only.
 - **Claude CLI (Primary Architect & Reviewer)**:
   - Divergent ideation & approach trade-offs (`claude_brainstorm.sh`)
   - Deep architecture & state-machine design (`claude_design.sh`)
@@ -98,13 +102,15 @@ codex-followup [--model <model>] "<FOLLOWUP_PROMPT>" [CONTEXT_FILES...]
 ```
 
 ### 8. Multi-Agent Consensus Deliberation (`agent-deliberate` & `consensus-round`)
-When facing major architectural trade-offs, conflicting implementation proposals, or contentious designs, run a structured, ring-topology debate between Claude (architect) and Codex (pragmatic red team / YAGNI watchdog), moderated by Antigravity with empirical spike support from Jetski.
+When facing major architectural trade-offs, conflicting implementation proposals, or contentious designs, run a structured, ring-topology 3-peer debate among **Gemini Peer Subagent** (fresh-context native `research` subagent), **Claude** (architect & edge-case hunter), and **Codex** (pragmatic red team / YAGNI watchdog), moderated by Antigravity (non-voting) with empirical spike support from Jetski (non-voting). Supports 2-of-3 survival quorum (`reduced_quorum: true`) if one external CLI is unavailable.
 
 ```bash
-# High-level deliberation runner (executes full multi-round convergence loop):
+# High-level deliberation runner (supports --init, --finalize, and standalone 2-peer CLI loop):
 agent-deliberate [OPTIONS] "<TOPIC_OR_REQUIREMENT>" [CONTEXT_FILES...]
 
 Options:
+  --init                  Initialize ledger dir, manifest, and Option 0 baseline, then exit
+  --finalize <ROUND>      Generate final_blueprint.md or dissent_register.md from round tally
   -c, --continue          Resume existing deliberation without clobbering completed rounds
   --guidance <TEXT>       Inject human operator steering guidance into subsequent rounds
   --guidance-file <FILE>  Inject human operator steering guidance from file
@@ -117,17 +123,23 @@ Options:
   --jetski-evidence <F>   Empirical test / benchmark evidence file
   -h, --help              Show this help message
 
-# Examples:
-# Fresh deliberation:
-agent-deliberate --rounds 3 "Design an in-memory cache strategy with TTL eviction for CLI tools" context.md
+# Antigravity 3-Peer Parallel Flow:
+# 1. Initialize:
+agent-deliberate --init --rounds 3 "Design an in-memory cache strategy with TTL eviction for CLI tools" context.md
+# 2. Same turn: run consensus-round --no-tally <DIR> <N> AND invoke_subagent (research, Role: "Gemini Deliberation Peer")
+# 3. Yield turn -> validate Gemini JSON ballot -> write <DIR>/round-<N>/gemini_ballot.json atomically
+# 4. Run 3-peer tally & anonymized digest:
+consensus-round --tally-only --gemini-ballot <DIR>/round-<N>/gemini_ballot.json <DIR> <N>
+# 5. Finalize on CONVERGED / CONVERGED_WITH_DISSENT / DEADLOCK:
+agent-deliberate --finalize <N> --dir <DIR>
 
-# Resume with human steering guidance after deadlock:
-agent-deliberate -c --dir .agent/deliberations/dlb-20261020-abcd --guidance "Prioritize optimistic locking and lightweight repair"
-
-# Single-round concurrent driver (executes Claude and Codex concurrently in isolated subshells):
+# Single-round concurrent driver:
 consensus-round [OPTIONS] <DELIBERATION_DIR> <ROUND_NUM>
 
 Options:
+  --no-tally              Run external CLIs & render gemini_prompt.md, skip tally
+  --tally-only            Skip external CLIs, tally existing ballots & emit anonymized digest
+  --gemini-ballot <FILE>  Path to Gemini native subagent ballot JSON (auto-detected if present)
   -r, --max-rounds <N>    Maximum rounds allowed (default: 3)
   --model-claude <M>      Model name for Claude CLI
   --model-codex <M>       Model name for Codex CLI

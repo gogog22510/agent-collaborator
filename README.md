@@ -1,6 +1,6 @@
 # 🤝 Agent Collaborator
 
-> **A Multi-Agent Peer Collaboration & Cross-Verification System orchestrated by Google Antigravity, dispatching specialized external peer agents (Claude CLI, OpenAI Codex) with Automatic Graceful Fallback.**
+> **A Tri-Model Multi-Agent Peer Collaboration & Cross-Verification System orchestrated by Google Antigravity, dispatching its own isolated native Gemini Peer Subagent (`invoke_subagent`) concurrently alongside external peer agents (Claude CLI, OpenAI Codex) with Automatic Graceful Fallback.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Orchestrator: Antigravity](https://img.shields.io/badge/Orchestrator-Antigravity-4285F4.svg)](#-architecture-antigravity-as-the-central-orchestrator)
@@ -87,11 +87,12 @@ External peer agent CLIs are **stateless by default**. Orchestrators must never 
 
 When facing major architectural trade-offs, conflicting implementation designs, or contentious technical choices, run a structured, ring-topology debate between Claude (architect & edge-case hunter) and Codex (pragmatic red team & YAGNI watchdog), moderated by Antigravity with empirical spike support from Jetski.
 
-#### 1. Ring Topology & Role Division
-- **Antigravity (Gemini - Deliberation Moderator & Host)**: Frames the topic, candidate options, and mandatory **Option 0** baseline; generates anonymized round digests (`digest.md`); tallies ballots with deterministic `jq` scoring; and synthesizes the final blueprint (`final_blueprint.md`).
-- **Claude CLI (Architect & Edge-Case Hunter)**: Evaluates high-level system topology, module boundaries, formal state machines, failure modes, and regression prevention.
-- **OpenAI Codex CLI (Pragmatic Red Team & YAGNI Watchdog)**: Audits codebase simplicity, standard-library alternatives, performance efficiency, and over-architecture.
-- **Jetski Native Subagent (Empirical Spike Collector)**: When factual disputes or performance claims arise between Claude and Codex, instructions are generated (`jetski_evidence_prompt.md`) to run throwaway spikes, tests, or benchmarks to provide empirical ground truth rather than subjective argument.
+#### 1. Ring Topology & Role Division (3-Peer Consensus + 2-of-3 Survival Quorum)
+- **Antigravity Main Agent (Deliberation Moderator & Host — Non-Voting)**: Frames the topic, candidate options, and mandatory **Option 0** baseline; dispatches peers concurrently; validates and atomically writes `gemini_ballot.json`; runs deterministic `jq` scoring; and synthesizes the final blueprint (`final_blueprint.md`).
+- **Gemini Peer Subagent (`invoke_subagent`, `research` — Independent Voting Peer)**: Evaluates the topic in a fresh, isolated read-only context alongside Claude and Codex, casting an equal structured ballot (`gemini_ballot.json`). If either Claude or Codex is unavailable, Gemini + the surviving CLI still forms a valid **2-of-3 survival quorum** (`reduced_quorum: true`) instead of degrading.
+- **Claude CLI (Architect & Edge-Case Hunter — Independent Voting Peer)**: Evaluates high-level system topology, module boundaries, formal state machines, failure modes, and regression prevention.
+- **OpenAI Codex CLI (Pragmatic Red Team & YAGNI Watchdog — Independent Voting Peer)**: Audits codebase simplicity, standard-library alternatives, performance efficiency, and over-architecture.
+- **Jetski Native Subagent (Empirical Spike Collector — Non-Voting)**: When `factual` disputes or performance claims arise, instructions are generated (`jetski_evidence_prompt.md`) to run throwaway spikes, tests, or benchmarks to provide empirical ground truth rather than subjective argument.
 
 #### 2. Structured Metric Table & Parsimony Veto
 All voting peers score proposals against five core metrics (scale 1-5):
