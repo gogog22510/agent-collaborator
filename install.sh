@@ -85,8 +85,8 @@ home_dir = sys.argv[2]
 with open(template_path, "r", encoding="utf-8") as f:
     text = f.read()
 
-# Extract content between ```markdown and ``` code fences if present, otherwise whole text
-match = re.search(r"```markdown\n(.*?)\n```", text, re.DOTALL)
+# Extract content between ````markdown ... ```` (or legacy ```markdown ... ```) code fences
+match = re.search(r"````markdown\n(.*?)\n````", text, re.DOTALL) or re.search(r"```markdown\n(.*?)\n```", text, re.DOTALL)
 content = match.group(1).strip() + "\n" if match else text
 
 targets = [
@@ -200,7 +200,7 @@ marker_end = sys.argv[4]
 with open(template_file, "r", encoding="utf-8") as f:
     text = f.read()
 
-match = re.search(r"```markdown\n(.*?)\n```", text, re.DOTALL)
+match = re.search(r"````markdown\n(.*?)\n````", text, re.DOTALL) or re.search(r"```markdown\n(.*?)\n```", text, re.DOTALL)
 contract = match.group(1).strip() + "\n" if match else text
 block = f"{marker_start}\n{contract}{marker_end}\n"
 

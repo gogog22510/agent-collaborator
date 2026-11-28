@@ -757,4 +757,39 @@ if jq -e '.options | map(select(.title == "Should Not Be Synthesized")) | length
 fi
 echo "PASS: Test 12 (mutual exclusion & invalid peer exclusion from digest) verified."
 
+echo "=== Test 13: Persistent voters guard, --tally-only 0-ballot DEGRADED, null counter_proposal, & empty --gemini-ballot ==="
+# 13a: voters persisted into manifest prevents silent 2-peer fallback on Round 2
+DELIB_DIR13="$TEMP_DIR/delib_test13"
+mkdir -p "$DELIB_DIR13/round-1" "$DELIB_DIR13/round-2"
+cat <<'EOF' > "$DELIB_DIR13/manifest.json"
+{
+  "deliberation_id": "test-dlb-13",
+  "topic": "Voters Guard & Null Safety Test",
+  "options": [{"id": "Option_0", "description": "Baseline"}],
+  "max_rounds": 3,
+  "voters": ["claude", "codex", "gemini"]
+}
+EOF
+cp "$DELIB_DIR10/round-1/claude_ballot.json" "$DELIB_DIR13/round-1/claude_ballot.json"
+cp "$DELIB_DIR10/round-1/codex_ballot.json" "$DELIB_DIR13/round-1/codex_ballot.json"
+# Run --tally-only WITHOUT --gemini-ballot and WITHOUT gemini_ballot.json -> voters guard keeps 3-peer mode!
+bash "$ROUND_SCRIPT" --tally-only "$DELIB_DIR13" 01
+[ "$(jq -r .reduced_quorum "$DELIB_DIR13/round-1/tally.json")" = "true" ] || { echo "FAIL: voters guard did not preserve 3-peer mode" >&2; exit 1; }
+[ "$(jq -r '.absent_peers | join(",")' "$DELIB_DIR13/round-1/tally.json")" = "gemini" ] || { echo "FAIL: voters guard did not record gemini in absent_peers" >&2; exit 1; }
+
+# 13b: --tally-only with 0 ballots writes DEGRADED tally.json & Agent C in digest
+bash "$ROUND_SCRIPT" --tally-only --gemini-ballot "" "$DELIB_DIR13" 2
+[ "$(jq -r .status "$DELIB_DIR13/round-2/tally.json")" = "DEGRADED" ] || { echo "FAIL: Expected DEGRADED on 0-ballot --tally-only" >&2; exit 1; }
+grep -q "Agent C" "$DELIB_DIR13/round-2/digest.md" || { echo "FAIL: Expected Agent C in digest.md on empty --gemini-ballot" >&2; exit 1; }
+
+# 13c: counter_proposal with null title does not crash digest generation
+DELIB_DIR13C="$TEMP_DIR/delib_test13c"
+mkdir -p "$DELIB_DIR13C/round-1"
+cp "$DELIB_DIR13/manifest.json" "$DELIB_DIR13C/manifest.json"
+jq '.preferred_option = "Option_0" | .stance = "BLOCK" | .counter_proposal = {"title": null, "description": null}' "$DELIB_DIR10/round-1/claude_ballot.json" > "$DELIB_DIR13C/round-1/claude_ballot.json"
+cp "$DELIB_DIR10/round-1/codex_ballot.json" "$DELIB_DIR13C/round-1/codex_ballot.json"
+bash "$ROUND_SCRIPT" --tally-only "$DELIB_DIR13C" 1
+[ -f "$DELIB_DIR13C/round-1/digest.md" ] || { echo "FAIL: digest.md missing when counter_proposal.title is null" >&2; exit 1; }
+echo "PASS: Test 13 (voters guard, 0-ballot DEGRADED, null counter_proposal, empty --gemini-ballot) verified."
+
 echo "All consensus_round tests passed successfully!"

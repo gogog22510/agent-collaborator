@@ -1,8 +1,8 @@
 # Multi-Agent Peer Collaboration Contract (`AGENTS.md`)
 
-`./install.sh --project <path>` automatically injects the ```markdown ... ``` block below into `<path>/AGENTS.md` for you (idempotently — pass `--no-agents-md` to skip it). This file is the source `install.sh` extracts from; the manual steps below are for reference or for injecting into a different location (`.agent/AGENTS.md`, system instructions, etc.) by hand:
+`./install.sh --project <path>` automatically injects the ````markdown ... ```` block below into `<path>/AGENTS.md` for you (idempotently — pass `--no-agents-md` to skip it). This file is the source `install.sh` extracts from; the manual steps below are for reference or for injecting into a different location (`.agent/AGENTS.md`, system instructions, etc.) by hand:
 
-```markdown
+````markdown
 # 🤝 Multi-Agent Peer Collaboration & Verification Protocol
 
 ## 1. Roles & Architecture Division of Labor
@@ -166,22 +166,22 @@ Each ballot also registers:
 - **Parsimony Veto**: Any proposal with a per-peer `yagni_and_parsimony` score below `3.0`, average `yagni_and_parsimony` below `3.5`, or unaddressed `over_architecture_flags` is disqualified from consensus. Proponents must either simplify the design in the next round or prove strict necessity.
 
 ### 4. Deterministic Convergence, 2-of-3 Survival Quorum & Bounded Termination
-- **Quorum Rule**: At least **2 valid ballots** are required (`quorum_met: true`). In 3-peer mode, if one external CLI fails or is unavailable while Gemini Peer + the surviving CLI succeed, deliberation proceeds as a valid **reduced quorum** (`reduced_quorum: true`, with `absent_peers` / `invalid_peers` recorded in `tally.json`). Only 0 or 1 valid ballots degrade to `DEGRADED`.
-- **Deterministic Convergence Gate (`CONVERGED`)**:
+- **Quorum Rule**: At least **2 valid ballots** are required (`quorum_met: true`). In 3-peer mode (tracked via `manifest.json` `"voters"`), if one external CLI fails or is unavailable while Gemini Peer + the surviving CLI succeed, deliberation proceeds as a valid **reduced quorum** (`reduced_quorum: true`, with `absent_peers` / `invalid_peers` recorded in `tally.json`). Only 0 or 1 valid ballots produce `DEGRADED` in `tally.json` and `NO_QUORUM` (exit `3`) in `agent-deliberate` — never falsely reported as `DEADLOCK`.
+- **Deterministic Convergence Gate (`CONVERGED` / `CONVERGED_WITH_DISSENT`)**:
   - Unanimous `preferred_option` across all participating valid voting peers.
   - Zero open `BLOCK` stances, active blocking objections, or active over-architecture flags.
-  - Score spread (`max - min`) $\le 1.0$ across all 5 core metrics.
   - Per-peer `yagni_and_parsimony` $\ge 3.0$ and average `yagni_and_parsimony` $\ge 3.5$.
+  - Score spread (`max - min`) $\le 1.0$ across all 5 core metrics yields `CONVERGED`; if all other gates pass but any metric spread $> 1.0$, yields `CONVERGED_WITH_DISSENT` (recorded in both `manifest.json` and `final_blueprint.md`).
 - **Bounded Termination (`MAX_ROUNDS=3` -> `DEADLOCK`)**:
   - Deliberation is strictly bounded to `MAX_ROUNDS` (default: 3 rounds).
   - Round 1 is blind (eliminates anchoring bias).
   - Subsequent rounds distribute an anonymized digest (`digest.md` using `Agent A` / `Agent B` / `Agent C`) addressing specific objection IDs.
-  - If unconverged after `MAX_ROUNDS`, the process terminates with status `DEADLOCK`, outputs `dissent_register.md` capturing irreconcilable trade-offs and empirical data, and escalates to the human operator for tie-breaking.
+  - If unconverged after `MAX_ROUNDS` with quorum met, the process terminates with status `DEADLOCK` (exit `2`), outputs `dissent_register.md` capturing irreconcilable trade-offs and empirical data, and escalates to the human operator for tie-breaking.
 
 ### 5. CLI Usage & Antigravity 3-Peer Orchestration Flow
 ```bash
 # Antigravity 3-Peer Flow (Gemini Native Subagent + Claude + Codex in parallel):
-# 1. Initialize ledger directory:
+# 1. Initialize ledger directory (records 3-peer voters in manifest.json):
 agent-deliberate --init [--rounds 3] [--add-option "..."] "<TOPIC_OR_REQUIREMENT>" [CONTEXT_FILES...]
 
 # 2. For each round N (in the SAME turn):
@@ -198,10 +198,11 @@ consensus-round --no-tally [--model-claude <M>] [--model-codex <M>] <DELIBERATIO
 consensus-round --tally-only --gemini-ballot <DELIBERATION_DIR>/round-<N>/gemini_ballot.json <DELIBERATION_DIR> <N>
 # 5. If IN_DEBATE with factual blocking objections, dispatch Jetski probe to write round-<N>/jetski_evidence.md
 #    and append findings to round-<N>/digest.md before Round N+1.
-#    Once tally.json reaches CONVERGED, CONVERGED_WITH_DISSENT, or DEADLOCK:
+#    Once tally.json reaches CONVERGED, CONVERGED_WITH_DISSENT, DEADLOCK, or DEGRADED:
 agent-deliberate --finalize <N> --dir <DELIBERATION_DIR>
 
 # Standalone 2-Peer CLI-Only Runner (backward-compatible):
 agent-deliberate [--rounds 3] [--model-claude <model>] [--model-codex <model>] "<TOPIC_OR_REQUIREMENT>" [CONTEXT_FILES...]
 agent-deliberate -c [--dir <DIR> | --id <ID>] [--guidance "<guidance_text>"] [--add-option "<json_or_title>"]
 ```
+````

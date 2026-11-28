@@ -899,5 +899,41 @@ grep -q "Round 1 of 5" "$TEST14_DIR/final_blueprint.md" || { echo "FAIL: final_b
 grep -qi "reduced quorum" "$TEST14_DIR/final_blueprint.md" || { echo "FAIL: final_blueprint.md missing reduced quorum notice" >&2; exit 1; }
 echo "PASS: Test 14 - --finalize hardening verified."
 
+echo "=== Test 15: Flag mutual exclusion, --finalize empty consensus_option atomic guard, & NO_QUORUM (exit 3) ==="
+# 15a: Incompatible flag combinations must exit 1
+for bad_args in "--init --finalize 1 --dir $TEST14_DIR" "-c --finalize 1 --dir $TEST14_DIR" "--init -c --dir $TEST14_DIR" "--finalize 1 --guidance foo --dir $TEST14_DIR"; do
+  set +e
+  bash "$DELIBERATE_SCRIPT" $bad_args >/dev/null 2>&1
+  BAD_RC=$?
+  eval "$SET_E"
+  [ "$BAD_RC" -eq 1 ] || { echo "FAIL: Expected exit 1 for '$bad_args', got $BAD_RC" >&2; exit 1; }
+done
+
+# 15b: --finalize with empty consensus_option exits 1 and leaves manifest untouched
+TEST15_DIR="$TEMP_DIR/test15_delib"
+bash "$DELIBERATE_SCRIPT" --init --id "dlb-fin-15" --dir "$TEST15_DIR" --rounds 4 "Finalize Atomic Guard Test" >/dev/null
+ORIG_MANIFEST_STATUS=$(jq -r .status "$TEST15_DIR/manifest.json")
+mkdir -p "$TEST15_DIR/round-1"
+echo '{"status": "CONVERGED", "consensus_option": null, "round": 1, "max_rounds": 4}' > "$TEST15_DIR/round-1/tally.json"
+set +e
+bash "$DELIBERATE_SCRIPT" --finalize 1 --dir "$TEST15_DIR" >/dev/null 2>&1
+EMPTY_OPT_RC=$?
+eval "$SET_E"
+[ "$EMPTY_OPT_RC" -eq 1 ] || { echo "FAIL: Expected exit 1 on empty consensus_option, got $EMPTY_OPT_RC" >&2; exit 1; }
+[ "$(jq -r .status "$TEST15_DIR/manifest.json")" = "$ORIG_MANIFEST_STATUS" ] || { echo "FAIL: manifest status mutated on failed finalize" >&2; exit 1; }
+[ ! -f "$TEST15_DIR/final_blueprint.md" ] || { echo "FAIL: final_blueprint.md should not exist on failed finalize" >&2; exit 1; }
+
+# 15c: --finalize on DEGRADED round exits 3 with NO_QUORUM (never DEADLOCK)
+mkdir -p "$TEST15_DIR/round-2"
+echo '{"status": "DEGRADED", "participating_peers": ["gemini"], "absent_peers": ["claude", "codex"], "invalid_peers": [], "quorum_met": false}' > "$TEST15_DIR/round-2/tally.json"
+set +e
+NOQ_OUT=$(bash "$DELIBERATE_SCRIPT" --finalize 2 --dir "$TEST15_DIR" 2>&1)
+NOQ_RC=$?
+eval "$SET_E"
+[ "$NOQ_RC" -eq 3 ] || { echo "FAIL: Expected exit 3 on DEGRADED finalize, got $NOQ_RC: $NOQ_OUT" >&2; exit 1; }
+[ "$(jq -r .status "$TEST15_DIR/manifest.json")" = "NO_QUORUM" ] || { echo "FAIL: Expected manifest status NO_QUORUM" >&2; exit 1; }
+echo "$NOQ_OUT" | grep -q "NO QUORUM" || { echo "FAIL: Expected NO QUORUM header" >&2; exit 1; }
+echo "PASS: Test 15 (flag mutex, atomic finalize guard, NO_QUORUM exit 3) verified."
+
 echo "All agent_deliberate tests passed successfully!"
 

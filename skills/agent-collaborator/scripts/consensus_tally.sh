@@ -76,12 +76,18 @@ elif [ -f "$(dirname "$OUTPUT_TALLY")/../manifest.json" ]; then
   REGISTERED_OPTIONS=$(jq -c '[.options[]? | if type == "object" then (.id // .name) elif type == "string" then . else empty end]' "$(dirname "$OUTPUT_TALLY")/../manifest.json" 2>/dev/null || echo "[]")
 fi
 
-# Ensure numeric round values
+# Ensure numeric round values (strip leading zeros so jq --argjson never fails)
 if ! [[ "$ROUND_NUM" =~ ^[0-9]+$ ]]; then
   ROUND_NUM=1
+else
+  ROUND_NUM="$((10#$ROUND_NUM))"
+  [ "$ROUND_NUM" -lt 1 ] && ROUND_NUM=1
 fi
 if ! [[ "$MAX_ROUNDS" =~ ^[0-9]+$ ]]; then
   MAX_ROUNDS=3
+else
+  MAX_ROUNDS="$((10#$MAX_ROUNDS))"
+  [ "$MAX_ROUNDS" -lt 1 ] && MAX_ROUNDS=3
 fi
 
 # Ensure output directory exists
@@ -91,22 +97,39 @@ TMP_TALLY="$OUT_DIR/.tally.tmp.$$"
 trap 'rm -f "$TMP_TALLY"' EXIT
 
 # Strict pre-scoring ballot classification: ABSENT | INVALID | VALID
+# Uses jq -s to guarantee exactly ONE top-level JSON object per file.
 classify_ballot() {
   local f="$1"
   if [ -z "$f" ] || [ ! -s "$f" ]; then
     echo "ABSENT"
     return 0
   fi
-  if jq -e '
-    . as $root |
-    type == "object" and
-    (.preferred_option | type == "string" and length > 0) and
-    (.stance | type == "string" and (. == "ACCEPT" or . == "ACCEPT_WITH_RESERVATIONS" or . == "BLOCK")) and
-    (.metrics | type == "object") and
-    (["technical_feasibility", "architectural_simplicity", "yagni_and_parsimony", "robustness_failure_modes", "maintainability_testability"]
-      | all(. as $k | ($root.metrics[$k].score | type == "number" and . >= 1 and . <= 5))) and
-    (.blocking_objections == null or (.blocking_objections | type == "array" and all(type == "object"))) and
-    (.over_architecture_flags == null or (.over_architecture_flags | type == "array" and all(type == "object")))
+  if jq -s -e '
+    length == 1 and
+    (.[0] as $root |
+      ($root | type == "object") and
+      ($root.preferred_option | type == "string" and length > 0) and
+      ($root.stance | type == "string" and (. == "ACCEPT" or . == "ACCEPT_WITH_RESERVATIONS" or . == "BLOCK")) and
+      ($root.metrics | type == "object") and
+      (["technical_feasibility", "architectural_simplicity", "yagni_and_parsimony", "robustness_failure_modes", "maintainability_testability"]
+        | all(. as $k | ($root.metrics[$k] | type == "object") and ($root.metrics[$k].score | type == "number" and . >= 1 and . <= 5))) and
+      ($root.blocking_objections == null or ($root.blocking_objections | type == "array" and all(
+        type == "object" and
+        (.id == null or (.id | type == "string")) and
+        (.type == null or (.type | type == "string")) and
+        (.metric_target == null or (.metric_target | type == "string")) and
+        (.claim == null or (.claim | type == "string")) and
+        (.resolution_condition == null or (.resolution_condition | type == "string")) and
+        (.target_option == null or (.target_option | type == "string"))
+      ))) and
+      ($root.over_architecture_flags == null or ($root.over_architecture_flags | type == "array" and all(
+        type == "object" and
+        (.pattern == null or (.pattern | type == "string")) and
+        (.critique == null or (.critique | type == "string")) and
+        (.simplification_remedy == null or (.simplification_remedy | type == "string")) and
+        (.target_option == null or (.target_option | type == "string"))
+      )))
+    )
   ' "$f" >/dev/null 2>&1; then
     echo "VALID"
   else

@@ -255,6 +255,24 @@ done
 
 set -- "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
 
+# Flag mutual-exclusion matrix
+if [ "$INIT_ONLY" = true ] && [ -n "$FINALIZE_ROUND" ]; then
+  echo "Error: --init and --finalize cannot be used together." >&2
+  exit 1
+fi
+if [ "$IS_CONTINUATION" = true ] && [ -n "$FINALIZE_ROUND" ]; then
+  echo "Error: -c/--continue and --finalize cannot be used together." >&2
+  exit 1
+fi
+if [ "$INIT_ONLY" = true ] && [ "$IS_CONTINUATION" = true ]; then
+  echo "Error: --init and -c/--continue cannot be used together." >&2
+  exit 1
+fi
+if [ -n "$FINALIZE_ROUND" ] && { [ -n "$GUIDANCE_TEXT" ] || [ "${#ADD_OPTIONS[@]}" -gt 0 ]; }; then
+  echo "Error: --finalize cannot be combined with --guidance or --add-option." >&2
+  exit 1
+fi
+
 TOPIC=""
 if [ "$#" -ge 1 ]; then
   if { [ "$IS_CONTINUATION" = true ] || [ -n "$FINALIZE_ROUND" ]; } && [ -z "$DELIBERATION_DIR" ] && [ -d "$1" ]; then
@@ -368,16 +386,21 @@ if [ -n "$FINALIZE_ROUND" ]; then
   if [ "$ROUNDS_EXPLICIT" = false ]; then
     MANIFEST_MAX=$(jq -r '.max_rounds // empty' "$MANIFEST_FILE" 2>/dev/null || true)
     if [[ "$MANIFEST_MAX" =~ ^[0-9]+$ ]]; then
-      MAX_ROUNDS="$MANIFEST_MAX"
+      MAX_ROUNDS="$((10#$MANIFEST_MAX))"
     fi
   fi
 elif [ ! -f "$MANIFEST_FILE" ]; then
+  VOTERS_JSON="null"
+  if [ "$INIT_ONLY" = true ]; then
+    VOTERS_JSON='["claude","codex","gemini"]'
+  fi
   jq -n \
     --arg id "$DELIBERATION_ID" \
     --arg topic "$TOPIC" \
     --arg created_at "$CREATED_AT" \
     --argjson max_rounds "$MAX_ROUNDS" \
     --argjson context_files "$CONTEXT_JSON" \
+    --argjson voters "$VOTERS_JSON" \
     '{
       "deliberation_id": $id,
       "topic": $topic,
@@ -392,7 +415,20 @@ elif [ ! -f "$MANIFEST_FILE" ]; then
         }
       ],
       "status": "IN_PROGRESS"
-    }' > "$MANIFEST_FILE"
+    } + (if $voters != null then {"voters": $voters} else {} end)' > "$MANIFEST_FILE.tmp.$$" && mv "$MANIFEST_FILE.tmp.$$" "$MANIFEST_FILE"
+elif [ "$INIT_ONLY" = true ]; then
+  # Idempotent --init on existing manifest: preserve status & max_rounds; ensure voters & Option_0 exist
+  jq \
+    --argjson context_files "$CONTEXT_JSON" \
+    '
+    (if ($context_files | length > 0) then .context_files = $context_files else . end) |
+    (if (.voters == null) then .voters = ["claude","codex","gemini"] else . end) |
+    if (.options | map(select(.id == "Option_0")) | length == 0) then
+      .options = ([{"id": "Option_0", "name": "Option 0", "description": "Minimal Viable Architecture (MVA) baseline using direct POSIX / standard library primitives with zero unnecessary abstractions or daemons."}] + (.options // []))
+    else
+      .
+    end
+    ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp.$$" && mv "$MANIFEST_FILE.tmp.$$" "$MANIFEST_FILE"
 else
   # Update existing manifest (or initialize options if needed)
   jq \
@@ -411,7 +447,7 @@ else
     else
       .
     end
-    ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp" && mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
+    ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp.$$" && mv "$MANIFEST_FILE.tmp.$$" "$MANIFEST_FILE"
 fi
 
 # Ingest any manual options provided via --add-option
@@ -722,8 +758,10 @@ lines.append(f"2. **Phase 2: Core Implementation** — Implement `{consensus_opt
 lines.append(f"3. **Phase 3: Pre-flight Verification** — Execute test suites and peer code reviews before completion.")
 lines.append("")
 
-with open(blueprint_out, "w", encoding="utf-8") as f:
+tmp_bp = f"{blueprint_out}.tmp.{os.getpid()}"
+with open(tmp_bp, "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")
+os.replace(tmp_bp, blueprint_out)
 ' "$MANIFEST_FILE" "$DELIBERATION_DIR/round-$target_round/tally.json" "$DELIBERATION_DIR/round-$target_round" "$blueprint_path" "$target_round"
 }
 
@@ -853,18 +891,33 @@ lines.append("")
 
 lines.append("## 6. Human Tie-Breaker Decision Menu")
 lines.append("The human operator should review the trade-offs above and select an option:")
-lines.append(f"1. **Option 0 (Minimal Viable Architecture)**: Enforce strict YAGNI parsimony baseline.")
-lines.append(f"2. **{c_pref} (Claude proposal)**: Accept Claude architectural model.")
-lines.append(f"3. **{x_pref} (Codex proposal)**: Accept Codex architectural model.")
-if has_gemini or "gemini" in tally.get("participating_peers", []):
-    lines.append(f"4. **{g_pref} (Gemini proposal)**: Accept Gemini Peer architectural model.")
-    lines.append("5. **Custom Compromise**: Provide manual override directives in implementation plan.")
-else:
-    lines.append("4. **Custom Compromise**: Provide manual override directives in implementation plan.")
+lines.append("1. **Option 0 (Minimal Viable Architecture)**: Enforce strict YAGNI parsimony baseline.")
+
+peer_prefs = []
+if "claude" not in excluded_peers:
+    peer_prefs.append(("Claude", c_pref))
+if "codex" not in excluded_peers:
+    peer_prefs.append(("Codex", x_pref))
+if has_gemini:
+    peer_prefs.append(("Gemini", g_pref))
+
+seen_opts = {}
+for pname, pref in peer_prefs:
+    if pref and pref != "Unknown":
+        seen_opts.setdefault(pref, []).append(pname)
+
+menu_idx = 2
+for opt_id, supporters in seen_opts.items():
+    sup_str = " / ".join(supporters)
+    lines.append(f"{menu_idx}. **{opt_id} ({sup_str} proposal)**: Accept {sup_str} architectural model.")
+    menu_idx += 1
+lines.append(f"{menu_idx}. **Custom Compromise**: Provide manual override directives in implementation plan.")
 lines.append("")
 
-with open(dissent_out, "w", encoding="utf-8") as f:
+tmp_dis = f"{dissent_out}.tmp.{os.getpid()}"
+with open(tmp_dis, "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")
+os.replace(tmp_dis, dissent_out)
 ' "$MANIFEST_FILE" "$DELIBERATION_DIR/round-$target_round/tally.json" "$DELIBERATION_DIR/round-$target_round" "$dissent_path" "$target_round"
 }
 
@@ -932,21 +985,38 @@ with open(prompt_out, "w", encoding="utf-8") as f:
 }
 
 # Helper to finalize CONVERGED / CONVERGED_WITH_DISSENT round
+# Validates tally & generates blueprint atomically BEFORE updating manifest.json.
 finalize_converged() {
   local target_round="$1"
   local round_tally="$DELIBERATION_DIR/round-$target_round/tally.json"
+  local tally_status
   local consensus_opt
   local yagni_avg
   local reduced_quorum
   local update_time
 
-  local tally_status
-  tally_status=$(jq -r '.status // "CONVERGED"' "$round_tally")
+  if [ ! -f "$round_tally" ] || ! jq -e 'type == "object"' "$round_tally" >/dev/null 2>&1; then
+    echo "Error: Invalid or missing tally.json at $round_tally" >&2
+    exit 1
+  fi
+
+  tally_status=$(jq -r '.status // empty' "$round_tally")
   consensus_opt=$(jq -r '.consensus_option // empty' "$round_tally")
+  if [ -z "$consensus_opt" ] || [ "$consensus_opt" = "null" ]; then
+    echo "Error: Missing or null consensus_option in $round_tally; cannot finalize." >&2
+    exit 1
+  fi
   yagni_avg=$(jq -r '.yagni_score_avg // 0' "$round_tally")
   reduced_quorum=$(jq -r '.reduced_quorum // false' "$round_tally")
   update_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
+  # 1. Generate final_blueprint.md atomically FIRST; abort before touching manifest if it fails
+  if ! generate_final_blueprint "$target_round"; then
+    echo "Error: Blueprint generation failed for round $target_round; manifest.json left unchanged." >&2
+    exit 1
+  fi
+
+  # 2. Update manifest.json atomically
   jq \
     --arg status "$tally_status" \
     --arg opt "$consensus_opt" \
@@ -957,9 +1027,11 @@ finalize_converged() {
     .consensus_option = $opt |
     .converged_round = $round |
     .updated_at = $updated_at
-    ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp" && mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
-
-  generate_final_blueprint "$target_round"
+    ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp.$$" && mv "$MANIFEST_FILE.tmp.$$" "$MANIFEST_FILE" || {
+      rm -f "$MANIFEST_FILE.tmp.$$"
+      echo "Error: Failed to update $MANIFEST_FILE" >&2
+      exit 1
+    }
 
   echo ""
   echo "================================================================================"
@@ -987,20 +1059,28 @@ def load_b(name):
     p = os.path.join(round_dir, f"{name}_ballot.json")
     if os.path.exists(p):
         try:
-            return json.load(open(p))
+            data = json.load(open(p))
+            return data if isinstance(data, dict) else {}
         except Exception:
             return {}
     return {}
 
-claude = load_b("claude")
-codex = load_b("codex")
-gemini_path = os.path.join(round_dir, "gemini_ballot.json")
-has_gemini = os.path.exists(gemini_path) or "gemini" in tally.get("participating_peers", [])
-gemini = load_b("gemini") if has_gemini else {}
+invalid_peers = set(tally.get("invalid_peers") or [])
+absent_peers = set(tally.get("absent_peers") or [])
+excluded_peers = invalid_peers | absent_peers
+participating = tally.get("participating_peers")
 
-peers = [("Claude", claude), ("Codex", codex)]
-if has_gemini:
-    peers.append(("Gemini", gemini))
+peer_defs = [
+    ("claude", "Claude", {} if "claude" in excluded_peers else load_b("claude")),
+    ("codex", "Codex", {} if "codex" in excluded_peers else load_b("codex")),
+    ("gemini", "Gemini", {} if "gemini" in excluded_peers else load_b("gemini")),
+]
+if isinstance(participating, list) and len(participating) > 0:
+    peers = [(label, b) for key, label, b in peer_defs if key in participating]
+else:
+    peers = [("Claude", peer_defs[0][2]), ("Codex", peer_defs[1][2])]
+    if os.path.exists(os.path.join(round_dir, "gemini_ballot.json")) and "gemini" not in excluded_peers:
+        peers.append(("Gemini", peer_defs[2][2]))
 
 metric_hdr, spread_hdr, status_hdr = "Metric", "Spread", "Status"
 header = f"{metric_hdr:<32} " + " ".join(f"{name:<8}" for name, _ in peers) + f" {spread_hdr:<8} {status_hdr:<8}"
@@ -1015,11 +1095,15 @@ metric_keys = [
     ("maintainability_testability", "maintainability_testability")
 ]
 
-spreads = tally.get("score_spreads", {})
+spreads = tally.get("score_spreads") or {}
 for key, label in metric_keys:
-    vals = [str(b.get("metrics", {}).get(key, {}).get("score", "-")) for _, b in peers]
+    vals = []
+    for _, b in peers:
+        m = b.get("metrics") if isinstance(b.get("metrics"), dict) else {}
+        k = m.get(key) if isinstance(m.get(key), dict) else {}
+        vals.append(str(k.get("score", "-")))
     sp = spreads.get(key, 0)
-    st = "PASS" if sp <= 1 else "DISSENT"
+    st = "PASS" if isinstance(sp, (int, float)) and sp <= 1 else "DISSENT"
     row = f"{label:<32} " + " ".join(f"{v:<8}" for v in vals) + f" {str(sp):<8} {st:<8}"
     print(row)
 ' "$round_tally" "$DELIBERATION_DIR/round-$target_round"
@@ -1035,9 +1119,22 @@ for key, label in metric_keys:
 # Helper to finalize DEADLOCK round
 finalize_deadlock() {
   local target_round="$1"
+  local round_tally="$DELIBERATION_DIR/round-$target_round/tally.json"
+  local reduced_quorum="false"
   local update_time
   update_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
+  if [ -f "$round_tally" ]; then
+    reduced_quorum=$(jq -r '.reduced_quorum // false' "$round_tally" 2>/dev/null || echo "false")
+  fi
+
+  # 1. Generate dissent_register.md atomically FIRST
+  if ! generate_dissent_register "$target_round"; then
+    echo "Error: Dissent register generation failed for round $target_round; manifest.json left unchanged." >&2
+    exit 1
+  fi
+
+  # 2. Update manifest.json atomically
   jq \
     --arg status "DEADLOCK" \
     --argjson round "$target_round" \
@@ -1046,9 +1143,11 @@ finalize_deadlock() {
     .status = $status |
     .deadlock_round = $round |
     .updated_at = $updated_at
-    ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp" && mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
-
-  generate_dissent_register "$target_round"
+    ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp.$$" && mv "$MANIFEST_FILE.tmp.$$" "$MANIFEST_FILE" || {
+      rm -f "$MANIFEST_FILE.tmp.$$"
+      echo "Error: Failed to update $MANIFEST_FILE" >&2
+      exit 1
+    }
 
   echo ""
   echo "================================================================================"
@@ -1058,60 +1157,70 @@ finalize_deadlock() {
   echo "Topic            : $TOPIC"
   echo "Rounds Executed  : $target_round of $MAX_ROUNDS"
   echo "Status           : DEADLOCK"
+  if [ "$reduced_quorum" = "true" ]; then
+    echo "Quorum           : 2/3 (reduced quorum)"
+  fi
   echo ""
 
   python3 -c '
 import sys, json, os
 
-def load_json(path, label):
+def load_json(path):
     if not os.path.exists(path):
         return {}
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            if isinstance(data, dict):
-                return data
-            return {}
+            return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
 round_dir = sys.argv[1]
-claude = load_json(os.path.join(round_dir, "claude_ballot.json"), "claude ballot")
-codex = load_json(os.path.join(round_dir, "codex_ballot.json"), "codex ballot")
-gemini_path = os.path.join(round_dir, "gemini_ballot.json")
-tally = load_json(os.path.join(round_dir, "tally.json"), "tally")
-has_gemini = os.path.exists(gemini_path) or "gemini" in tally.get("participating_peers", [])
-gemini = load_json(gemini_path, "gemini ballot") if has_gemini else {}
+tally = load_json(os.path.join(round_dir, "tally.json"))
+invalid_peers = set(tally.get("invalid_peers") or [])
+absent_peers = set(tally.get("absent_peers") or [])
+excluded_peers = invalid_peers | absent_peers
+participating = tally.get("participating_peers")
 
-c_p = claude.get("preferred_option", "Unknown")
-x_p = codex.get("preferred_option", "Unknown")
-g_p = gemini.get("preferred_option", "Unknown")
+peer_defs = [
+    ("claude", "Claude", {} if "claude" in excluded_peers else load_json(os.path.join(round_dir, "claude_ballot.json"))),
+    ("codex", "Codex", {} if "codex" in excluded_peers else load_json(os.path.join(round_dir, "codex_ballot.json"))),
+    ("gemini", "Gemini", {} if "gemini" in excluded_peers else load_json(os.path.join(round_dir, "gemini_ballot.json"))),
+]
+if isinstance(participating, list) and len(participating) > 0:
+    active_peers = [(label, b) for key, label, b in peer_defs if key in participating]
+else:
+    active_peers = [("Claude", peer_defs[0][2]), ("Codex", peer_defs[1][2])]
+    if os.path.exists(os.path.join(round_dir, "gemini_ballot.json")) and "gemini" not in excluded_peers:
+        active_peers.append(("Gemini", peer_defs[2][2]))
 
-print(f"Claude Preference : {c_p}")
-print(f"Codex Preference  : {x_p}")
-if has_gemini:
-    print(f"Gemini Preference : {g_p}")
+seen_opts = {}
+for label, b in active_peers:
+    pref = str(b.get("preferred_option") or "Unknown")
+    print(f"{label} Preference : {pref}")
+    if pref != "Unknown":
+        seen_opts.setdefault(pref, []).append(label)
+
 print("")
 print("Unresolved Blocking Objections:")
-objs = tally.get("blocking_objections", [])
+objs = [o for o in (tally.get("blocking_objections") or []) if isinstance(o, dict)]
 if objs:
     for o in objs:
-        otype = o.get("type", "tradeoff").upper()
-        oid = o.get("id", "OBJ")
-        oclaim = o.get("claim", "")
+        otype = str(o.get("type") or "tradeoff").upper()
+        oid = str(o.get("id") or "OBJ")
+        oclaim = str(o.get("claim") or "")
         print(f"  - [{otype}] {oid}: {oclaim}")
 else:
     print("  - Disagreement on metric tradeoffs and architecture preferences.")
 print("")
 print("Human Tie-Breaker Options:")
 print("  [1] Option 0: Enforce Minimal Viable Architecture (MVA) baseline")
-print(f"  [2] Option A ({c_p}): Proceed with Claude proposal")
-print(f"  [3] Option B ({x_p}): Proceed with Codex proposal")
-if has_gemini:
-    print(f"  [4] Option C ({g_p}): Proceed with Gemini Peer proposal")
-    print("  [5] Custom Override: Settle tradeoff manually and override deliberation")
-else:
-    print("  [4] Custom Override: Settle tradeoff manually and override deliberation")
+idx = 2
+for opt_id, supporters in seen_opts.items():
+    sup_str = " / ".join(supporters)
+    print(f"  [{idx}] {opt_id}: Proceed with {sup_str} proposal")
+    idx += 1
+print(f"  [{idx}] Custom Override: Settle tradeoff manually and override deliberation")
 ' "$DELIBERATION_DIR/round-$target_round"
 
   echo ""
@@ -1119,6 +1228,48 @@ else:
   echo "================================================================================"
   echo ""
   exit 2
+}
+
+# Helper to finalize NO_QUORUM (DEGRADED) round — never falsely report as DEADLOCK
+finalize_no_quorum() {
+  local target_round="$1"
+  local round_tally="$DELIBERATION_DIR/round-$target_round/tally.json"
+  local update_time
+  update_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  jq \
+    --arg status "NO_QUORUM" \
+    --argjson round "$target_round" \
+    --arg updated_at "$update_time" \
+    '
+    .status = $status |
+    .no_quorum_round = $round |
+    .updated_at = $updated_at
+    ' "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp.$$" && mv "$MANIFEST_FILE.tmp.$$" "$MANIFEST_FILE" || {
+      rm -f "$MANIFEST_FILE.tmp.$$"
+      echo "Error: Failed to update $MANIFEST_FILE" >&2
+      exit 1
+    }
+
+  local part_peers absent_peers invalid_peers
+  part_peers=$(jq -r '(.participating_peers // []) | join(", ")' "$round_tally" 2>/dev/null || echo "none")
+  absent_peers=$(jq -r '(.absent_peers // []) | join(", ")' "$round_tally" 2>/dev/null || echo "none")
+  invalid_peers=$(jq -r '(.invalid_peers // []) | join(", ")' "$round_tally" 2>/dev/null || echo "none")
+
+  echo ""
+  echo "================================================================================"
+  echo "⚠️  NO QUORUM (DEGRADED): Fewer than 2 valid ballots in Round $target_round"
+  echo "================================================================================"
+  echo "Deliberation ID     : $DELIBERATION_ID"
+  echo "Topic               : $TOPIC"
+  echo "Status              : NO_QUORUM"
+  echo "Participating Peers : ${part_peers:-none}"
+  echo "Absent Peers        : ${absent_peers:-none}"
+  echo "Invalid Peers       : ${invalid_peers:-none}"
+  echo "Action              : Re-run the missing/invalid peer(s) or resume with -c."
+  echo "================================================================================"
+  echo ""
+  exit 3
 }
 
 # Handle --finalize <ROUND_NUM> mode directly
@@ -1133,8 +1284,10 @@ if [ -n "$FINALIZE_ROUND" ]; then
     finalize_converged "$FINALIZE_ROUND"
   elif [ "$FIN_STATUS" = "DEADLOCK" ]; then
     finalize_deadlock "$FINALIZE_ROUND"
+  elif [ "$FIN_STATUS" = "DEGRADED" ]; then
+    finalize_no_quorum "$FINALIZE_ROUND"
   else
-    echo "Error: Round $FINALIZE_ROUND tally status is '$FIN_STATUS' (expected CONVERGED, CONVERGED_WITH_DISSENT, or DEADLOCK)." >&2
+    echo "Error: Round $FINALIZE_ROUND tally status is '$FIN_STATUS' (expected CONVERGED, CONVERGED_WITH_DISSENT, DEADLOCK, or DEGRADED)." >&2
     exit 1
   fi
 fi
@@ -1247,7 +1400,12 @@ for (( round=START_ROUND; round<=MAX_ROUNDS; round++ )); do
     fi
   fi
 
-  # Case 3: Deadlock detected by tally
+  # Case 3: Degraded / No Quorum -> halt cleanly as NO_QUORUM (exit 3), never misreport as DEADLOCK
+  if [ "$STATUS" = "DEGRADED" ]; then
+    finalize_no_quorum "$round"
+  fi
+
+  # Case 4: Deadlock detected by tally
   if [ "$STATUS" = "DEADLOCK" ]; then
     break
   fi

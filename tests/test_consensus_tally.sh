@@ -244,5 +244,16 @@ if [ "$(jq -r .status "$TEMP_DIR/tally17b.json")" != "CONVERGED" ] || \
 fi
 echo "PASS: Malformed JSON & non-array blocking_objections validation verified"
 
+echo "=== Test 18: Leading-Zero Round & Multi-JSON-Doc File Rejected as invalid_peers ==="
+cat "$TEMP_DIR/gemini.json" "$TEMP_DIR/gemini.json" > "$TEMP_DIR/gemini_multidoc.json"
+bash "$TALLY_SH" --gemini "$TEMP_DIR/gemini_multidoc.json" "$TEMP_DIR/claude.json" "$TEMP_DIR/codex.json" "$TEMP_DIR/tally18.json" 01 03
+if [ "$(jq -r .status "$TEMP_DIR/tally18.json")" != "CONVERGED" ] || \
+   [ "$(jq -r '.invalid_peers | join(",")' "$TEMP_DIR/tally18.json")" != "gemini" ] || \
+   [ "$(jq -r .round "$TEMP_DIR/tally18.json")" -ne 1 ]; then
+  echo "FAIL: Expected multi-doc gemini rejected and leading-zero round normalized to 1, got $(cat "$TEMP_DIR/tally18.json")" >&2
+  exit 1
+fi
+echo "PASS: Leading-zero round & multi-JSON-doc rejection verified"
+
 echo "All tally tests passed successfully!"
 

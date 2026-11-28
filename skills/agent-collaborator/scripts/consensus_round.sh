@@ -187,8 +187,13 @@ if [ ! -f "$MANIFEST" ]; then
   exit 1
 fi
 
-# Validate Round Number
-if ! [[ "$ROUND_NUM" =~ ^[0-9]+$ ]] || [ "$ROUND_NUM" -lt 1 ]; then
+# Validate and normalize Round Number (strip leading zeros)
+if ! [[ "$ROUND_NUM" =~ ^[0-9]+$ ]]; then
+  echo "Error: ROUND_NUM must be a positive integer, got '$ROUND_NUM'" >&2
+  exit 1
+fi
+ROUND_NUM="$((10#$ROUND_NUM))"
+if [ "$ROUND_NUM" -lt 1 ]; then
   echo "Error: ROUND_NUM must be a positive integer, got '$ROUND_NUM'" >&2
   exit 1
 fi
@@ -207,6 +212,9 @@ if [ -z "$MAX_ROUNDS" ]; then
 fi
 if [ -z "$MAX_ROUNDS" ] || ! [[ "$MAX_ROUNDS" =~ ^[0-9]+$ ]]; then
   MAX_ROUNDS=3
+else
+  MAX_ROUNDS="$((10#$MAX_ROUNDS))"
+  [ "$MAX_ROUNDS" -lt 1 ] && MAX_ROUNDS=3
 fi
 
 # Read Option 0 MVA Baseline
@@ -227,7 +235,7 @@ PROPOSED_OPTIONS=$(jq -r '
   elif .options then
     (if (.options | type) == "string" then .options
      elif (.options | type) == "array" then
-       (.options | map("- **" + (.id // .name // "Option") + "**: " + (.description // .desc // (. | tostring))) | join("\n"))
+       (.options | map(if type == "object" then ("- **" + (.id // .name // "Option") + "**: " + (.description // .desc // (. | tostring))) else ("- " + (. | tostring)) end) | join("\n"))
      elif (.options | type) == "object" then
        (.options | to_entries | map("- **" + .key + "**: " + (.value | tostring)) | join("\n"))
      else (.options | tostring)
@@ -737,9 +745,11 @@ with open(out_file, "w") as f:
   fi
 fi
 
-# Resolve optional Gemini ballot path (explicit --gemini-ballot or auto-detected in round dir)
+# Resolve optional Gemini ballot path (explicit --gemini-ballot, round dir file, or manifest voters)
 GEMINI_BALLOT_PATH=""
 THREE_PEER_MODE=false
+MANIFEST_HAS_GEMINI=$(jq -r '(.voters // []) | if type == "array" and index("gemini") != null then "true" else "false" end' "$MANIFEST" 2>/dev/null || echo "false")
+
 if [ "$GEMINI_BALLOT_EXPLICIT" = true ]; then
   GEMINI_BALLOT_PATH="$GEMINI_BALLOT_OPT"
   THREE_PEER_MODE=true
@@ -755,6 +765,18 @@ if [ "$GEMINI_BALLOT_EXPLICIT" = true ]; then
 elif [ -f "$ROUND_DIR/gemini_ballot.json" ]; then
   GEMINI_BALLOT_PATH="$ROUND_DIR/gemini_ballot.json"
   THREE_PEER_MODE=true
+elif [ "$MANIFEST_HAS_GEMINI" = "true" ]; then
+  GEMINI_BALLOT_PATH="$ROUND_DIR/gemini_ballot.json"
+  THREE_PEER_MODE=true
+fi
+
+# Persist 3-peer voters list into manifest.json so subsequent rounds never silently drop Gemini
+if [ "$THREE_PEER_MODE" = true ] && [ "$MANIFEST_HAS_GEMINI" != "true" ]; then
+  if jq '.voters = ["claude", "codex", "gemini"]' "$MANIFEST" > "$MANIFEST.tmp.$$" 2>/dev/null; then
+    mv "$MANIFEST.tmp.$$" "$MANIFEST"
+  else
+    rm -f "$MANIFEST.tmp.$$"
+  fi
 fi
 
 CLAUDE_BALLOT_EXISTS=false
@@ -771,8 +793,8 @@ if [ -n "$GEMINI_BALLOT_PATH" ] && [ -s "$GEMINI_BALLOT_PATH" ] && jq -e . "$GEM
   GEMINI_BALLOT_EXISTS=true
 fi
 
-# Check for total peer outage
-if [ "$CLAUDE_BALLOT_EXISTS" = false ] && [ "$CODEX_BALLOT_EXISTS" = false ] && [ "$GEMINI_BALLOT_EXISTS" = false ]; then
+# Check for total peer outage (only when CLIs actually ran; --tally-only always writes DEGRADED tally)
+if [ "$TALLY_ONLY" = false ] && [ "$CLAUDE_BALLOT_EXISTS" = false ] && [ "$CODEX_BALLOT_EXISTS" = false ] && [ "$GEMINI_BALLOT_EXISTS" = false ]; then
   echo "⚠️ [FALLBACK_TRIGGERED: PEERS_UNAVAILABLE]" >&2
   echo "Reason: All peer agents failed or were unavailable (Exit Claude: $EXIT_CLAUDE, Exit Codex: $EXIT_CODEX)." >&2
   exit 100
@@ -796,7 +818,7 @@ TALLY_STATUS=$(jq -r '.status // "IN_DEBATE"' "$ROUND_DIR/tally.json")
 # If status is NOT "CONVERGED", generate digest.md
 if [ "$TALLY_STATUS" != "CONVERGED" ]; then
   python3 -c '
-import sys, json
+import sys, json, os
 
 tally_file = sys.argv[1]
 claude_ballot_file = sys.argv[2]
@@ -818,20 +840,27 @@ def load_ballot(path):
     except Exception:
         return {}
 
+def safe_str(val, default=""):
+    if val is None:
+        return default
+    return str(val)
+
 claude_ballot = load_ballot(claude_ballot_file)
 codex_ballot = load_ballot(codex_ballot_file)
 gemini_ballot = load_ballot(gemini_ballot_file)
 
-invalid_peers = set(tally.get("invalid_peers", []))
-absent_peers = set(tally.get("absent_peers", []))
+invalid_peers = set(tally.get("invalid_peers") or [])
+absent_peers = set(tally.get("absent_peers") or [])
+participating_peers = set(tally.get("participating_peers") or [])
 excluded_peers = invalid_peers | absent_peers
+has_gemini_slot = bool(gemini_ballot_file) or ("gemini" in (participating_peers | excluded_peers))
 
 # Ordered list of (anon_label, internal_peer_name, ballot) — exclude invalid/absent ballots from scoring & synthesis
 anon_peers = [
     ("Agent A", "claude", {} if "claude" in excluded_peers else claude_ballot),
     ("Agent B", "codex", {} if "codex" in excluded_peers else codex_ballot),
 ]
-if gemini_ballot_file:
+if has_gemini_slot:
     anon_peers.append(("Agent C", "gemini", {} if "gemini" in excluded_peers else gemini_ballot))
 
 peer_to_anon = {pname: alabel for alabel, pname, _ in anon_peers}
@@ -846,10 +875,11 @@ if manifest_file:
         existing_titles = set()
         for o in options:
             if isinstance(o, dict):
-                if "id" in o:
-                    existing_ids.add(o["id"])
-                if "title" in o and o["title"]:
-                    existing_titles.add(o["title"].strip().lower())
+                if "id" in o and o["id"] is not None:
+                    existing_ids.add(str(o["id"]))
+                t_val = safe_str(o.get("title")).strip()
+                if t_val:
+                    existing_titles.add(t_val.lower())
             elif isinstance(o, str):
                 existing_ids.add(o)
 
@@ -860,8 +890,11 @@ if manifest_file:
                 continue
             cp = ballot.get("counter_proposal")
             if isinstance(cp, dict):
-                title = cp.get("title", "").strip()
-                desc = cp.get("description", "").strip()
+                title = safe_str(cp.get("title")).strip()
+                desc = safe_str(cp.get("description")).strip()
+                res_list = cp.get("resolves_objections")
+                if not isinstance(res_list, list):
+                    res_list = []
                 if (title or desc) and (not title or title.lower() not in existing_titles) and len(options) < 6:
                     next_letter = None
                     for l in letters:
@@ -876,7 +909,7 @@ if manifest_file:
                             "title": title or f"Option {next_letter}",
                             "description": desc or title,
                             "proposed_by": alabel,
-                            "resolves_objections": cp.get("resolves_objections", [])
+                            "resolves_objections": [safe_str(x) for x in res_list if x is not None]
                         }
                         options.append(new_opt)
                         existing_ids.add(new_opt_id)
@@ -887,21 +920,23 @@ if manifest_file:
 
         if manifest_updated:
             manifest_data["options"] = options
-            with open(manifest_file, "w", encoding="utf-8") as mf:
+            tmp_manifest = f"{manifest_file}.tmp.{os.getpid()}"
+            with open(tmp_manifest, "w", encoding="utf-8") as mf:
                 json.dump(manifest_data, mf, indent=2)
+            os.replace(tmp_manifest, manifest_file)
     except Exception as e:
         sys.stderr.write(f"Warning: Failed to synthesize options into manifest: {e}\n")
 
 round_num = tally.get("round", 1)
 max_rounds = tally.get("max_rounds", 3)
-status = tally.get("status", "IN_DEBATE")
+status = safe_str(tally.get("status"), "IN_DEBATE")
 consensus_opt = tally.get("consensus_option")
-yagni_avg = tally.get("yagni_score_avg", 0)
-reduced_quorum = tally.get("reduced_quorum", False)
+yagni_avg = tally.get("yagni_score_avg", 0) or 0
+reduced_quorum = bool(tally.get("reduced_quorum", False))
 
-spreads = tally.get("score_spreads", {})
-blocking_objs = tally.get("blocking_objections", [])
-over_arch_flags = tally.get("over_architecture_flags", [])
+spreads = tally.get("score_spreads") or {}
+blocking_objs = [o for o in (tally.get("blocking_objections") or []) if isinstance(o, dict)]
+over_arch_flags = [fl for fl in (tally.get("over_architecture_flags") or []) if isinstance(fl, dict)]
 
 lines = []
 lines.append(f"# Deliberation Round {round_num} Disagreement Digest")
@@ -911,7 +946,7 @@ if consensus_opt:
     lines.append(f"**Consensus Option**: `{consensus_opt}`")
 if reduced_quorum:
     lines.append("**Quorum**: Reduced quorum (2 of 3 peers participating)")
-lines.append(f"**Average YAGNI Score**: `{yagni_avg:.2f}` / 5.0 (Threshold: 3.5)")
+lines.append(f"**Average YAGNI Score**: `{float(yagni_avg):.2f}` / 5.0 (Threshold: 3.5)")
 lines.append("")
 
 lines.append("## 1. Anonymized Agent Positions & Preferred Options")
@@ -923,8 +958,8 @@ for alabel, pname, ballot in anon_peers:
     if pname in absent_peers:
         lines.append(f"- **{alabel}**: `Absent / Degraded`")
         continue
-    opt = ballot.get("preferred_option", "Unknown / Degraded")
-    stance = ballot.get("stance", "UNKNOWN")
+    opt = safe_str(ballot.get("preferred_option"), "Unknown / Degraded")
+    stance = safe_str(ballot.get("stance"), "UNKNOWN")
     agent_opts.append((alabel, opt))
     lines.append(f"- **{alabel}**: Preferred Option `{opt}` | Stance: `{stance}`")
 lines.append("")
@@ -944,7 +979,11 @@ metrics = [
 ]
 
 for key, label in metrics:
-    row_scores = [str(b.get("metrics", {}).get(key, {}).get("score", "-")) for _, _, b in anon_peers]
+    row_scores = []
+    for _, _, b in anon_peers:
+        m_dict = b.get("metrics") if isinstance(b.get("metrics"), dict) else {}
+        k_dict = m_dict.get(key) if isinstance(m_dict.get(key), dict) else {}
+        row_scores.append(safe_str(k_dict.get("score"), "-"))
     spread = spreads.get(key, "-")
     spread_status = "OK (<=1)" if isinstance(spread, (int, float)) and spread <= 1 else "**DISPUTE (>1)**"
     lines.append("| " + " | ".join([label] + row_scores + [str(spread), spread_status]) + " |")
@@ -953,11 +992,11 @@ lines.append("")
 lines.append("## 3. Active Blocking Objections")
 if blocking_objs:
     for obj in blocking_objs:
-        obj_id = obj.get("id", "OBJ")
-        obj_type = obj.get("type", "general")
-        target = obj.get("metric_target", "general")
-        claim = obj.get("claim", "No claim provided")
-        res = obj.get("resolution_condition", "None provided")
+        obj_id = safe_str(obj.get("id"), "OBJ")
+        obj_type = safe_str(obj.get("type"), "general")
+        target = safe_str(obj.get("metric_target"), "general")
+        claim = safe_str(obj.get("claim"), "No claim provided")
+        res = safe_str(obj.get("resolution_condition"), "None provided")
         lines.append(f"### `{obj_id}` [{obj_type.upper()}] — Target: `{target}`")
         lines.append(f"- **Claim**: {claim}")
         lines.append(f"- **Resolution Condition**: {res}")
@@ -969,9 +1008,9 @@ else:
 lines.append("## 4. Over-Architecture (YAGNI) Flags")
 if over_arch_flags:
     for flag in over_arch_flags:
-        pat = flag.get("pattern", "OVER_ARCHITECTURE")
-        critique = flag.get("critique", "No critique provided")
-        remedy = flag.get("simplification_remedy", "No remedy provided")
+        pat = safe_str(flag.get("pattern"), "OVER_ARCHITECTURE")
+        critique = safe_str(flag.get("critique"), "No critique provided")
+        remedy = safe_str(flag.get("simplification_remedy"), "No remedy provided")
         lines.append(f"### Pattern: `{pat}`")
         lines.append(f"- **Critique**: {critique}")
         lines.append(f"- **Simplification Remedy**: {remedy}")
@@ -981,31 +1020,31 @@ else:
     lines.append("")
 
 lines.append("## 5. Round Resolution Directives for Next Round")
-factual_objs = [o for o in blocking_objs if o.get("type") == "factual"]
-tradeoff_objs = [o for o in blocking_objs if o.get("type") == "tradeoff"]
-ambiguity_objs = [o for o in blocking_objs if o.get("type") == "ambiguity"]
+factual_objs = [o for o in blocking_objs if safe_str(o.get("type")) == "factual"]
+tradeoff_objs = [o for o in blocking_objs if safe_str(o.get("type")) == "tradeoff"]
+ambiguity_objs = [o for o in blocking_objs if safe_str(o.get("type")) == "ambiguity"]
 
 if factual_objs:
     lines.append("### Factual Disputes (Target for Empirical Spike / Verification)")
     for o in factual_objs:
-        oid = o.get("id", "OBJ")
-        oclaim = o.get("claim", "")
+        oid = safe_str(o.get("id"), "OBJ")
+        oclaim = safe_str(o.get("claim"))
         lines.append(f"- **`{oid}`**: {oclaim} -> Resolve via empirical code spike or benchmark test.")
     lines.append("")
 
 if tradeoff_objs:
     lines.append("### Tradeoff Disputes (Architectural & Operational Priorities)")
     for o in tradeoff_objs:
-        oid = o.get("id", "OBJ")
-        oclaim = o.get("claim", "")
+        oid = safe_str(o.get("id"), "OBJ")
+        oclaim = safe_str(o.get("claim"))
         lines.append(f"- **`{oid}`**: {oclaim} -> Evaluating agents must weigh operational simplicity against proposed benefits.")
     lines.append("")
 
 if ambiguity_objs:
     lines.append("### Specification Ambiguities")
     for o in ambiguity_objs:
-        oid = o.get("id", "OBJ")
-        oclaim = o.get("claim", "")
+        oid = safe_str(o.get("id"), "OBJ")
+        oclaim = safe_str(o.get("claim"))
         lines.append(f"- **`{oid}`**: {oclaim} -> Clarification required from Moderator in manifest.")
     lines.append("")
 
@@ -1022,12 +1061,12 @@ if synthesized_options:
     lines.append("## 💡 Synthesized Candidate Options for Next Round")
     lines.append("The following candidate options were synthesized from peer counter-proposals and registered in manifest.json:")
     for opt in synthesized_options:
-        opt_id = opt.get("id")
-        opt_title = opt.get("title", "")
-        opt_by_anon = opt.get("proposed_by", "a peer")
+        opt_id = safe_str(opt.get("id"))
+        opt_title = safe_str(opt.get("title"))
+        opt_by_anon = safe_str(opt.get("proposed_by"), "a peer")
         opt_by_anon = peer_to_anon.get(opt_by_anon, opt_by_anon)
-        opt_desc = opt.get("description", "")
-        res_objs = ", ".join(f"`{x}`" for x in opt.get("resolves_objections", [])) or "None specified"
+        opt_desc = safe_str(opt.get("description"))
+        res_objs = ", ".join(f"`{x}`" for x in (opt.get("resolves_objections") or [])) or "None specified"
         lines.append(f"- **`{opt_id}`** — **Title**: {opt_title} (Proposed by `{opt_by_anon}`)")
         lines.append(f"  - **Description**: {opt_desc}")
         lines.append(f"  - **Resolves Objections**: {res_objs}")
@@ -1035,9 +1074,14 @@ if synthesized_options:
     lines.append("- In Round N+1, peers SHOULD evaluate these candidate options in addition to baseline Option 0.")
     lines.append("")
 
-with open(digest_out, "w", encoding="utf-8") as f:
+tmp_digest = f"{digest_out}.tmp.{os.getpid()}"
+with open(tmp_digest, "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")
-' "$ROUND_DIR/tally.json" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/digest.md" "$MANIFEST" "$GEMINI_BALLOT_PATH"
+os.replace(tmp_digest, digest_out)
+' "$ROUND_DIR/tally.json" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/digest.md" "$MANIFEST" "$GEMINI_BALLOT_PATH" || {
+    echo "Error: Failed to generate $ROUND_DIR/digest.md" >&2
+    exit 1
+  }
 fi
 
 echo "Round $ROUND_NUM completed successfully. Tally status: $TALLY_STATUS."
