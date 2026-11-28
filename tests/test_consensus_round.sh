@@ -721,4 +721,40 @@ bash "$ROUND_SCRIPT" --tally-only "$DELIB_DIR11" 1
 [ "$(jq -r '.absent_peers | join(",")' "$DELIB_DIR11/round-1/tally.json")" = "codex" ] || { echo "FAIL: Expected absent_peers=[codex]" >&2; exit 1; }
 echo "PASS: Test 11 (2-of-3 survival quorum + auto-detect gemini_ballot.json) verified."
 
+echo "=== Test 12: --no-tally + --tally-only mutual exclusion (exit 1) & INVALID peer excluded from digest ==="
+set +e
+bash "$ROUND_SCRIPT" --no-tally --tally-only "$DELIB_DIR11" 1 >/dev/null 2>&1
+MUTEX_RC=$?
+eval "$SET_E_STATE"
+[ "$MUTEX_RC" -eq 1 ] || { echo "FAIL: Expected exit 1 for --no-tally --tally-only, got $MUTEX_RC" >&2; exit 1; }
+
+DELIB_DIR12="$TEMP_DIR/delib_test12"
+mkdir -p "$DELIB_DIR12/round-1"
+cat <<'EOF' > "$DELIB_DIR12/manifest.json"
+{
+  "deliberation_id": "test-dlb-12",
+  "topic": "Invalid Peer Exclusion Test",
+  "options": [{"id": "Option_0", "description": "Baseline"}],
+  "max_rounds": 3
+}
+EOF
+cp "$DELIB_DIR10/round-1/claude_ballot.json" "$DELIB_DIR12/round-1/claude_ballot.json"
+cp "$DELIB_DIR10/round-1/codex_ballot.json" "$DELIB_DIR12/round-1/codex_ballot.json"
+jq '.preferred_option = "Option_B" | .stance = "BLOCK"' "$DELIB_DIR12/round-1/codex_ballot.json" > "$DELIB_DIR12/round-1/x.json" && mv "$DELIB_DIR12/round-1/x.json" "$DELIB_DIR12/round-1/codex_ballot.json"
+cat <<'EOF' > "$DELIB_DIR12/round-1/gemini_ballot.json"
+{
+  "preferred_option": "Option_Bad",
+  "stance": "BLOCK",
+  "metrics": {"technical_feasibility": {"score": 5}},
+  "counter_proposal": {"title": "Should Not Be Synthesized", "description": "Invalid ballot CP"}
+}
+EOF
+bash "$ROUND_SCRIPT" --tally-only --gemini-ballot "$DELIB_DIR12/round-1/gemini_ballot.json" "$DELIB_DIR12" 1
+grep -q "Invalid / Excluded" "$DELIB_DIR12/round-1/digest.md" || { echo "FAIL: Expected Invalid / Excluded in digest.md" >&2; exit 1; }
+if jq -e '.options | map(select(.title == "Should Not Be Synthesized")) | length > 0' "$DELIB_DIR12/manifest.json" >/dev/null 2>&1; then
+  echo "FAIL: Counter-proposal from INVALID ballot should not be synthesized" >&2
+  exit 1
+fi
+echo "PASS: Test 12 (mutual exclusion & invalid peer exclusion from digest) verified."
+
 echo "All consensus_round tests passed successfully!"

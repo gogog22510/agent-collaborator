@@ -226,5 +226,23 @@ if [ "$(jq -r .status "$TEMP_DIR/tally16.json")" != "CONVERGED" ] || \
 fi
 echo "PASS: Strict ballot validation verified"
 
+echo "=== Test 17: Malformed JSON & Invalid blocking_objections Type Classified as invalid_peers ==="
+echo '{broken json' > "$TEMP_DIR/gemini_syntax_err.json"
+bash "$TALLY_SH" --gemini "$TEMP_DIR/gemini_syntax_err.json" "$TEMP_DIR/claude.json" "$TEMP_DIR/codex.json" "$TEMP_DIR/tally17a.json" 1 3
+if [ "$(jq -r .status "$TEMP_DIR/tally17a.json")" != "CONVERGED" ] || \
+   [ "$(jq -r '.invalid_peers | join(",")' "$TEMP_DIR/tally17a.json")" != "gemini" ]; then
+  echo "FAIL: Expected malformed JSON gemini in invalid_peers, got $(cat "$TEMP_DIR/tally17a.json")" >&2
+  exit 1
+fi
+
+jq '.blocking_objections = "not-an-array"' "$TEMP_DIR/gemini.json" > "$TEMP_DIR/gemini_bad_obj.json"
+bash "$TALLY_SH" --gemini "$TEMP_DIR/gemini_bad_obj.json" "$TEMP_DIR/claude.json" "$TEMP_DIR/codex.json" "$TEMP_DIR/tally17b.json" 1 3
+if [ "$(jq -r .status "$TEMP_DIR/tally17b.json")" != "CONVERGED" ] || \
+   [ "$(jq -r '.invalid_peers | join(",")' "$TEMP_DIR/tally17b.json")" != "gemini" ]; then
+  echo "FAIL: Expected non-array blocking_objections in invalid_peers, got $(cat "$TEMP_DIR/tally17b.json")" >&2
+  exit 1
+fi
+echo "PASS: Malformed JSON & non-array blocking_objections validation verified"
+
 echo "All tally tests passed successfully!"
 

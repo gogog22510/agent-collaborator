@@ -743,6 +743,15 @@ THREE_PEER_MODE=false
 if [ "$GEMINI_BALLOT_EXPLICIT" = true ]; then
   GEMINI_BALLOT_PATH="$GEMINI_BALLOT_OPT"
   THREE_PEER_MODE=true
+  # Persist external Gemini ballot into ROUND_DIR so --finalize and Round N+1 can read it
+  if [ -n "$GEMINI_BALLOT_PATH" ] && [ -f "$GEMINI_BALLOT_PATH" ]; then
+    ABS_GEM="$(cd "$(dirname "$GEMINI_BALLOT_PATH")" && pwd)/$(basename "$GEMINI_BALLOT_PATH")"
+    ABS_DEST="$ROUND_DIR/gemini_ballot.json"
+    if [ "$ABS_GEM" != "$ABS_DEST" ]; then
+      cp "$ABS_GEM" "$ABS_DEST.tmp.$$" && mv "$ABS_DEST.tmp.$$" "$ABS_DEST"
+      GEMINI_BALLOT_PATH="$ABS_DEST"
+    fi
+  fi
 elif [ -f "$ROUND_DIR/gemini_ballot.json" ]; then
   GEMINI_BALLOT_PATH="$ROUND_DIR/gemini_ballot.json"
   THREE_PEER_MODE=true
@@ -769,16 +778,16 @@ if [ "$CLAUDE_BALLOT_EXISTS" = false ] && [ "$CODEX_BALLOT_EXISTS" = false ] && 
   exit 100
 fi
 
-# Execute consensus_tally.sh to produce tally.json
+# Execute consensus_tally.sh to produce tally.json (check exit code explicitly)
+TALLY_RC=0
 if [ "$THREE_PEER_MODE" = true ]; then
-  bash "$TALLY_SH" --gemini "$GEMINI_BALLOT_PATH" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/tally.json" "$ROUND_NUM" "$MAX_ROUNDS" "$MANIFEST"
+  bash "$TALLY_SH" --gemini "$GEMINI_BALLOT_PATH" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/tally.json" "$ROUND_NUM" "$MAX_ROUNDS" "$MANIFEST" || TALLY_RC=$?
 else
-  bash "$TALLY_SH" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/tally.json" "$ROUND_NUM" "$MAX_ROUNDS" "$MANIFEST"
+  bash "$TALLY_SH" "$ROUND_DIR/claude_ballot.json" "$ROUND_DIR/codex_ballot.json" "$ROUND_DIR/tally.json" "$ROUND_NUM" "$MAX_ROUNDS" "$MANIFEST" || TALLY_RC=$?
 fi
 
-# Verify tally.json exists
-if [ ! -f "$ROUND_DIR/tally.json" ]; then
-  echo "Error: Failed to generate $ROUND_DIR/tally.json" >&2
+if [ "$TALLY_RC" -ne 0 ] || [ ! -f "$ROUND_DIR/tally.json" ]; then
+  echo "Error: Failed to generate $ROUND_DIR/tally.json (exit $TALLY_RC)" >&2
   exit 1
 fi
 
@@ -813,13 +822,17 @@ claude_ballot = load_ballot(claude_ballot_file)
 codex_ballot = load_ballot(codex_ballot_file)
 gemini_ballot = load_ballot(gemini_ballot_file)
 
-# Ordered list of (anon_label, internal_peer_name, ballot)
+invalid_peers = set(tally.get("invalid_peers", []))
+absent_peers = set(tally.get("absent_peers", []))
+excluded_peers = invalid_peers | absent_peers
+
+# Ordered list of (anon_label, internal_peer_name, ballot) — exclude invalid/absent ballots from scoring & synthesis
 anon_peers = [
-    ("Agent A", "claude", claude_ballot),
-    ("Agent B", "codex", codex_ballot),
+    ("Agent A", "claude", {} if "claude" in excluded_peers else claude_ballot),
+    ("Agent B", "codex", {} if "codex" in excluded_peers else codex_ballot),
 ]
 if gemini_ballot_file:
-    anon_peers.append(("Agent C", "gemini", gemini_ballot))
+    anon_peers.append(("Agent C", "gemini", {} if "gemini" in excluded_peers else gemini_ballot))
 
 peer_to_anon = {pname: alabel for alabel, pname, _ in anon_peers}
 
@@ -843,6 +856,8 @@ if manifest_file:
         letters = ["A", "B", "C", "D", "E", "F"]
         manifest_updated = False
         for alabel, peer_name, ballot in anon_peers:
+            if not ballot:
+                continue
             cp = ballot.get("counter_proposal")
             if isinstance(cp, dict):
                 title = cp.get("title", "").strip()
@@ -860,7 +875,7 @@ if manifest_file:
                             "id": new_opt_id,
                             "title": title or f"Option {next_letter}",
                             "description": desc or title,
-                            "proposed_by": peer_name,
+                            "proposed_by": alabel,
                             "resolves_objections": cp.get("resolves_objections", [])
                         }
                         options.append(new_opt)
@@ -901,7 +916,13 @@ lines.append("")
 
 lines.append("## 1. Anonymized Agent Positions & Preferred Options")
 agent_opts = []
-for alabel, _, ballot in anon_peers:
+for alabel, pname, ballot in anon_peers:
+    if pname in invalid_peers:
+        lines.append(f"- **{alabel}**: `Invalid / Excluded`")
+        continue
+    if pname in absent_peers:
+        lines.append(f"- **{alabel}**: `Absent / Degraded`")
+        continue
     opt = ballot.get("preferred_option", "Unknown / Degraded")
     stance = ballot.get("stance", "UNKNOWN")
     agent_opts.append((alabel, opt))
@@ -1003,7 +1024,8 @@ if synthesized_options:
     for opt in synthesized_options:
         opt_id = opt.get("id")
         opt_title = opt.get("title", "")
-        opt_by_anon = peer_to_anon.get(opt.get("proposed_by", ""), "a peer")
+        opt_by_anon = opt.get("proposed_by", "a peer")
+        opt_by_anon = peer_to_anon.get(opt_by_anon, opt_by_anon)
         opt_desc = opt.get("description", "")
         res_objs = ", ".join(f"`{x}`" for x in opt.get("resolves_objections", [])) or "None specified"
         lines.append(f"- **`{opt_id}`** — **Title**: {opt_title} (Proposed by `{opt_by_anon}`)")

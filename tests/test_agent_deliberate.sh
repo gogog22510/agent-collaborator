@@ -858,5 +858,46 @@ grep -q "Gemini Preferred Option" "$TEST13_DIR/dissent_register.md" || { echo "F
 echo "$OUTPUT13" | grep -q "Gemini Preference" || { echo "FAIL: terminal deadlock output missing Gemini Preference" >&2; exit 1; }
 echo "PASS: Test 13 - --finalize 3-peer DEADLOCK verified."
 
+echo "=== Test 14: --finalize preserves max_rounds, CONVERGED_WITH_DISSENT, leading-zero round, & malformed gemini_ballot.json ==="
+TEST14_DIR="$TEMP_DIR/test14_delib"
+bash "$DELIBERATE_SCRIPT" --init --id "dlb-fin-14" --dir "$TEST14_DIR" --rounds 5 "Finalize Hardening Test" >/dev/null
+mkdir -p "$TEST14_DIR/round-1"
+cp "$TEST11_DIR/round-1/claude_ballot.json" "$TEST14_DIR/round-1/claude_ballot.json"
+cp "$TEST11_DIR/round-1/codex_ballot.json" "$TEST14_DIR/round-1/codex_ballot.json"
+echo '{corrupted gemini json' > "$TEST14_DIR/round-1/gemini_ballot.json"
+cat <<'EOF' > "$TEST14_DIR/round-1/tally.json"
+{
+  "deliberation_id": "dlb-fin-14",
+  "round": 1,
+  "max_rounds": 5,
+  "status": "CONVERGED_WITH_DISSENT",
+  "consensus_option": "Option_0",
+  "yagni_score_avg": 5.0,
+  "score_spreads": {
+    "technical_feasibility": 0,
+    "architectural_simplicity": 0,
+    "yagni_and_parsimony": 0,
+    "robustness_failure_modes": 2,
+    "maintainability_testability": 0
+  },
+  "blocking_objections": [],
+  "over_architecture_flags": [],
+  "participating_peers": ["claude", "codex"],
+  "absent_peers": [],
+  "invalid_peers": ["gemini"],
+  "quorum_met": true,
+  "reduced_quorum": true
+}
+EOF
+
+OUTPUT14=$(bash "$DELIBERATE_SCRIPT" --finalize 01 --dir "$TEST14_DIR")
+EXIT14=$?
+[ "$EXIT14" -eq 0 ] || { echo "FAIL: --finalize 01 exited $EXIT14, expected 0" >&2; exit 1; }
+[ "$(jq -r .max_rounds "$TEST14_DIR/manifest.json")" -eq 5 ] || { echo "FAIL: --finalize clobbered max_rounds" >&2; exit 1; }
+[ "$(jq -r .status "$TEST14_DIR/manifest.json")" = "CONVERGED_WITH_DISSENT" ] || { echo "FAIL: --finalize downgraded CONVERGED_WITH_DISSENT" >&2; exit 1; }
+grep -q "Round 1 of 5" "$TEST14_DIR/final_blueprint.md" || { echo "FAIL: final_blueprint.md missing preserved Round 1 of 5" >&2; exit 1; }
+grep -qi "reduced quorum" "$TEST14_DIR/final_blueprint.md" || { echo "FAIL: final_blueprint.md missing reduced quorum notice" >&2; exit 1; }
+echo "PASS: Test 14 - --finalize hardening verified."
+
 echo "All agent_deliberate tests passed successfully!"
 

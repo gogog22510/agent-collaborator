@@ -50,8 +50,12 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --finalize)
-      if [[ -n "${2:-}" && "${2:-}" =~ ^[0-9]+$ && "${2:-}" -ge 1 ]]; then
+      if [[ -n "${2:-}" && "${2:-}" =~ ^[0-9]+$ ]]; then
         FINALIZE_ROUND="$((10#$2))"
+        if [ "$FINALIZE_ROUND" -lt 1 ]; then
+          echo "Error: --finalize requires a positive integer round number." >&2
+          exit 1
+        fi
         shift 2
       else
         echo "Error: --finalize requires a positive integer round number." >&2
@@ -60,8 +64,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --finalize=*)
       RAW_FIN="${1#*=}"
-      if [[ "$RAW_FIN" =~ ^[0-9]+$ && "$RAW_FIN" -ge 1 ]]; then
+      if [[ "$RAW_FIN" =~ ^[0-9]+$ ]]; then
         FINALIZE_ROUND="$((10#$RAW_FIN))"
+        if [ "$FINALIZE_ROUND" -lt 1 ]; then
+          echo "Error: --finalize requires a positive integer round number." >&2
+          exit 1
+        fi
       else
         echo "Error: --finalize requires a positive integer round number." >&2
         exit 1
@@ -249,7 +257,7 @@ set -- "${POSITIONAL_ARGS[@]+"${POSITIONAL_ARGS[@]}"}"
 
 TOPIC=""
 if [ "$#" -ge 1 ]; then
-  if [ "$IS_CONTINUATION" = true ] && [ -z "$DELIBERATION_DIR" ] && [ -d "$1" ]; then
+  if { [ "$IS_CONTINUATION" = true ] || [ -n "$FINALIZE_ROUND" ]; } && [ -z "$DELIBERATION_DIR" ] && [ -d "$1" ]; then
     DELIBERATION_DIR="$1"
     shift
   else
@@ -355,7 +363,15 @@ if [ "${#CONTEXT_FILES[@]}" -gt 0 ]; then
   CONTEXT_JSON=$(printf '%s\n' "${CONTEXT_FILES[@]}" | jq -R . | jq -s .)
 fi
 
-if [ ! -f "$MANIFEST_FILE" ]; then
+if [ -n "$FINALIZE_ROUND" ]; then
+  # Read-only finalize path: preserve manifest.json max_rounds and status until finalize_* runs
+  if [ "$ROUNDS_EXPLICIT" = false ]; then
+    MANIFEST_MAX=$(jq -r '.max_rounds // empty' "$MANIFEST_FILE" 2>/dev/null || true)
+    if [[ "$MANIFEST_MAX" =~ ^[0-9]+$ ]]; then
+      MAX_ROUNDS="$MANIFEST_MAX"
+    fi
+  fi
+elif [ ! -f "$MANIFEST_FILE" ]; then
   jq -n \
     --arg id "$DELIBERATION_ID" \
     --arg topic "$TOPIC" \
@@ -587,28 +603,37 @@ if not consensus_opt or consensus_opt == "null":
     print("Error: Missing or invalid consensus_option in tally.json.", file=sys.stderr)
     sys.exit(1)
 
-claude_ballot = {}
-claude_path = os.path.join(round_dir, "claude_ballot.json")
-if os.path.exists(claude_path):
-    with open(claude_path, "r", encoding="utf-8") as f:
-        claude_ballot = json.load(f)
+def load_ballot(path):
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
-codex_ballot = {}
-codex_path = os.path.join(round_dir, "codex_ballot.json")
-if os.path.exists(codex_path):
-    with open(codex_path, "r", encoding="utf-8") as f:
-        codex_ballot = json.load(f)
+invalid_peers = set(tally.get("invalid_peers", []))
+absent_peers = set(tally.get("absent_peers", []))
+excluded_peers = invalid_peers | absent_peers
+participating = tally.get("participating_peers")
 
-gemini_ballot = {}
+claude_ballot = {} if "claude" in excluded_peers else load_ballot(os.path.join(round_dir, "claude_ballot.json"))
+codex_ballot = {} if "codex" in excluded_peers else load_ballot(os.path.join(round_dir, "codex_ballot.json"))
 gemini_path = os.path.join(round_dir, "gemini_ballot.json")
-has_gemini = os.path.exists(gemini_path)
-if has_gemini:
-    with open(gemini_path, "r", encoding="utf-8") as f:
-        gemini_ballot = json.load(f)
+gemini_ballot = {} if "gemini" in excluded_peers else load_ballot(gemini_path)
 
-peers = [("Claude", claude_ballot), ("Codex", codex_ballot)]
-if has_gemini or "gemini" in tally.get("participating_peers", []):
-    peers.append(("Gemini", gemini_ballot))
+peer_map = [
+    ("claude", "Claude", claude_ballot),
+    ("codex", "Codex", codex_ballot),
+    ("gemini", "Gemini", gemini_ballot),
+]
+if isinstance(participating, list) and len(participating) > 0:
+    peers = [(label, ballot) for key, label, ballot in peer_map if key in participating]
+else:
+    peers = [("Claude", claude_ballot), ("Codex", codex_ballot)]
+    if os.path.exists(gemini_path) and "gemini" not in excluded_peers:
+        peers.append(("Gemini", gemini_ballot))
 
 delib_id = manifest.get("deliberation_id", "deliberation")
 topic = manifest.get("topic", "No topic specified")
@@ -726,24 +751,26 @@ if os.path.exists(tally_file):
     with open(tally_file, "r", encoding="utf-8") as f:
         tally = json.load(f)
 
-claude_ballot = {}
-claude_path = os.path.join(round_dir, "claude_ballot.json")
-if os.path.exists(claude_path):
-    with open(claude_path, "r", encoding="utf-8") as f:
-        claude_ballot = json.load(f)
+def load_ballot(path):
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
-codex_ballot = {}
-codex_path = os.path.join(round_dir, "codex_ballot.json")
-if os.path.exists(codex_path):
-    with open(codex_path, "r", encoding="utf-8") as f:
-        codex_ballot = json.load(f)
+invalid_peers = set(tally.get("invalid_peers", []))
+absent_peers = set(tally.get("absent_peers", []))
+excluded_peers = invalid_peers | absent_peers
+participating = tally.get("participating_peers")
 
-gemini_ballot = {}
+claude_ballot = {} if "claude" in excluded_peers else load_ballot(os.path.join(round_dir, "claude_ballot.json"))
+codex_ballot = {} if "codex" in excluded_peers else load_ballot(os.path.join(round_dir, "codex_ballot.json"))
 gemini_path = os.path.join(round_dir, "gemini_ballot.json")
-has_gemini = os.path.exists(gemini_path)
-if has_gemini:
-    with open(gemini_path, "r", encoding="utf-8") as f:
-        gemini_ballot = json.load(f)
+gemini_ballot = {} if "gemini" in excluded_peers else load_ballot(gemini_path)
+has_gemini = ("gemini" in participating) if isinstance(participating, list) else (os.path.exists(gemini_path) and "gemini" not in excluded_peers)
 
 delib_id = manifest.get("deliberation_id", "deliberation")
 topic = manifest.get("topic", "No topic specified")
@@ -755,6 +782,7 @@ over_arch_flags = tally.get("over_architecture_flags", [])
 spreads = tally.get("score_spreads", {})
 max_rounds_val = manifest.get("max_rounds", 3)
 updated_at_val = manifest.get("updated_at", "")
+reduced_quorum = tally.get("reduced_quorum", False)
 
 lines = []
 lines.append("# Multi-Agent Deliberation Dissent Register (Deadlock Escalation)")
@@ -763,6 +791,9 @@ lines.append(f"- **Deliberation ID**: `{delib_id}`")
 lines.append(f"- **Topic**: {topic}")
 lines.append(f"- **Status**: `DEADLOCK`")
 lines.append(f"- **Rounds Executed**: {round_num} of {max_rounds_val}")
+if reduced_quorum:
+    missing_list = ", ".join(sorted(absent_peers | invalid_peers)) or "1 peer"
+    lines.append(f"- **Quorum**: 2/3 (reduced quorum — absent/invalid: {missing_list})")
 lines.append(f"- **Timestamp**: {updated_at_val}")
 lines.append("")
 lines.append("---")
@@ -774,9 +805,11 @@ lines.append("Human operator tie-breaking is required to finalize the implementa
 lines.append("")
 
 lines.append("## 2. Divergent Preferred Options")
-lines.append(f"- **Claude Preferred Option**: `{c_pref}`")
-lines.append(f"- **Codex Preferred Option**: `{x_pref}`")
-if has_gemini or "gemini" in tally.get("participating_peers", []):
+if "claude" not in excluded_peers:
+    lines.append(f"- **Claude Preferred Option**: `{c_pref}`")
+if "codex" not in excluded_peers:
+    lines.append(f"- **Codex Preferred Option**: `{x_pref}`")
+if has_gemini:
     lines.append(f"- **Gemini Preferred Option**: `{g_pref}`")
 lines.append("")
 
@@ -907,13 +940,15 @@ finalize_converged() {
   local reduced_quorum
   local update_time
 
+  local tally_status
+  tally_status=$(jq -r '.status // "CONVERGED"' "$round_tally")
   consensus_opt=$(jq -r '.consensus_option // empty' "$round_tally")
   yagni_avg=$(jq -r '.yagni_score_avg // 0' "$round_tally")
   reduced_quorum=$(jq -r '.reduced_quorum // false' "$round_tally")
   update_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
   jq \
-    --arg status "CONVERGED" \
+    --arg status "$tally_status" \
     --arg opt "$consensus_opt" \
     --argjson round "$target_round" \
     --arg updated_at "$update_time" \

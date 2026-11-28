@@ -104,7 +104,9 @@ classify_ballot() {
     (.stance | type == "string" and (. == "ACCEPT" or . == "ACCEPT_WITH_RESERVATIONS" or . == "BLOCK")) and
     (.metrics | type == "object") and
     (["technical_feasibility", "architectural_simplicity", "yagni_and_parsimony", "robustness_failure_modes", "maintainability_testability"]
-      | all(. as $k | ($root.metrics[$k].score | type == "number" and . >= 1 and . <= 5)))
+      | all(. as $k | ($root.metrics[$k].score | type == "number" and . >= 1 and . <= 5))) and
+    (.blocking_objections == null or (.blocking_objections | type == "array" and all(type == "object"))) and
+    (.over_architecture_flags == null or (.over_architecture_flags | type == "array" and all(type == "object")))
   ' "$f" >/dev/null 2>&1; then
     echo "VALID"
   else

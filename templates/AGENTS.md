@@ -26,7 +26,7 @@
   - **Gemini Peer Subagent (Antigravity Native `invoke_subagent`)**:
     - *Isolated Fresh-Context Peer*: In Antigravity, ALWAYS dispatch a read-only `research` subagent (`invoke_subagent`, `TypeName: "research"`, `Model: "inherit"`) concurrently alongside available external CLIs so Gemini contributes an independent perspective free of main-thread confirmation bias.
     - *Task Roles*: Assign a clear role (`Gemini Brainstormer`, `Gemini Architect`, `Gemini Spec Reviewer`, `Gemini Code Reviewer`, `Gemini Performance Reviewer`, or `Gemini Deliberation Peer`).
-    - *Code Review Input*: Because `research` subagents are read-only and do not run shell commands, pass the `git diff` (or changed file paths + diff summary) directly in the subagent prompt.
+    - *Code Review Input*: Because `research` subagents run in a read-only sandbox, pass the `git diff` (or changed file paths + diff summary) directly in the subagent prompt.
   - **Claude CLI (`agent-collaborator`)**:
     - *Ideation & Approach Trade-offs*: `claude-brainstorm [--model <model>] [-c] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_brainstorm.sh`)
     - *System Architecture & State Machines*: `claude-design [--model <model>] [-c] "<requirement>" [context_files...]` (or `bash ~/.gemini/config/skills/agent-collaborator/scripts/claude_design.sh`)
@@ -163,7 +163,7 @@ Each ballot also registers:
 
 ### 3. Anti-Overarchitecture & Parsimony Veto
 - **Mandatory Option 0 MVA Baseline**: Round 1 requires defining `Option_0` (Minimal Viable Architecture using native/OS primitives with zero speculative abstractions). Any alternative option bears a complexity tax and must justify why Option 0 is insufficient.
-- **Parsimony Veto**: Any proposal whose average `yagni_and_parsimony` score is below `3.5`, or has unaddressed `over_architecture_flags`, is disqualified from consensus. Proponents must either simplify the design in the next round or prove strict necessity.
+- **Parsimony Veto**: Any proposal with a per-peer `yagni_and_parsimony` score below `3.0`, average `yagni_and_parsimony` below `3.5`, or unaddressed `over_architecture_flags` is disqualified from consensus. Proponents must either simplify the design in the next round or prove strict necessity.
 
 ### 4. Deterministic Convergence, 2-of-3 Survival Quorum & Bounded Termination
 - **Quorum Rule**: At least **2 valid ballots** are required (`quorum_met: true`). In 3-peer mode, if one external CLI fails or is unavailable while Gemini Peer + the surviving CLI succeed, deliberation proceeds as a valid **reduced quorum** (`reduced_quorum: true`, with `absent_peers` / `invalid_peers` recorded in `tally.json`). Only 0 or 1 valid ballots degrade to `DEGRADED`.
@@ -192,9 +192,13 @@ consensus-round --no-tally [--model-claude <M>] [--model-codex <M>] <DELIBERATIO
 #      and (for N > 1) round-(N-1)/digest.md + round-(N-1)/gemini_ballot.json.
 # 3. Yield turn until both return; validate Gemini's JSON ballot with jq and write
 #    <DELIBERATION_DIR>/round-<N>/gemini_ballot.json (and .md) atomically.
+#    (If Gemini fails or returns invalid JSON, still pass --gemini-ballot to --tally-only so
+#     tally.json records reduced_quorum: true and absent_peers/invalid_peers accurately.)
 # 4. Run deterministic 3-peer tally + anonymized digest:
 consensus-round --tally-only --gemini-ballot <DELIBERATION_DIR>/round-<N>/gemini_ballot.json <DELIBERATION_DIR> <N>
-# 5. Once tally.json reaches CONVERGED, CONVERGED_WITH_DISSENT, or DEADLOCK:
+# 5. If IN_DEBATE with factual blocking objections, dispatch Jetski probe to write round-<N>/jetski_evidence.md
+#    and append findings to round-<N>/digest.md before Round N+1.
+#    Once tally.json reaches CONVERGED, CONVERGED_WITH_DISSENT, or DEADLOCK:
 agent-deliberate --finalize <N> --dir <DELIBERATION_DIR>
 
 # Standalone 2-Peer CLI-Only Runner (backward-compatible):
